@@ -1,7 +1,8 @@
 ################################################################################
 # Copyright (c) 2001 Simplewire. All rights reserved. 
 #
-# Net::SMS.pm, version 2.41
+# Net::SMS.pm, version 2.51 (EMS Enabled)
+# 
 #
 # Simplewire, Inc. grants to Licensee, a non-exclusive, non-transferable,
 # royalty-free and limited license to use Licensed Software internally for
@@ -25,7 +26,7 @@ package Net::SMS;
 #---------------------------------------------------------------------
 # Version Info
 #---------------------------------------------------------------------
-$Net::SMS::VERSION = '2.41';
+$Net::SMS::VERSION = '2.51';
 require 5.002;
 
 #---------------------------------------------------------------------
@@ -139,10 +140,13 @@ sub reset
 	$self->{	m_ServerProtocol	}	= 'http://';
 	$self->{	m_SubscriberID		}	= '';
 	$self->{	m_SubscriberPassword}	= '';
-	$self->{	m_UserAgent			}	= 'Perl/SMS/2.4.1';
+	$self->{	m_UserAgent			}	= 'Perl/SMS/2.5.0';
 	$self->{	m_UserIP			}	= '';
 	$self->{	m_XMLVersion		}	= '1.0';
-
+	# Added for EMS
+	$self->{    m_OptContentType    }   = '';
+    $self->{    m_EmsElements       }   = [];
+	
 }
 
 
@@ -465,7 +469,7 @@ sub msgPictureFilename
 
 		$self->{m_MsgImageFilename} = $file_path;
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'picturemessage';
+		$self->{m_OptType}	=	'picture';
 	}
 
     return $self->{m_MsgImageFilename} if defined($self->{m_MsgImageFilename}) || return undef;
@@ -485,7 +489,7 @@ sub msgPictureHex
 	{
 		my $hexResult = shift();
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'picturemessage';
+		$self->{m_OptType}	=	'picture';
 	}
 
     return $self->{m_MsgImage} if defined($self->{m_MsgImage}) || return undef;
@@ -853,6 +857,321 @@ sub optType
 
 }
 
+############################################
+# EMS Functionality
+# Must set optContentType = "ems" for EMS to work
+# emsAddText()
+# emsAddPredefinedSound()
+# emsAddPredefinedAnimation()
+# emsAddUserDefinedSound()
+# emsAddSmallPicture()
+# emsAddSmallPictureHex()
+# emsAddLargePicture()
+# emsAddLargePictureHex()
+# emsAddUserPromptIndicator()
+############################################
+
+sub optContentType
+{
+	# This function deprecates the optType function and requires
+	# a list of constants. So check for 'em
+	
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1) { 
+	   
+	   # we're being set
+	   my $var = shift;
+	   
+	   my @opts = ("ringtone", "icon", "logo", "picture", "profile", "setting", "ems");
+       my $success = 0;
+	   foreach my $opt (@opts) {
+	       $success = 1 if ($var eq $opt);
+	   }
+	   
+	   if ($success == 1) {
+	       # set both vars so we don't break anything
+		   # eventually optType should be phased out
+		   $self->{m_OptContentType} = $var;
+		   $self->{m_OptType} = $var;
+	   } else {
+	       die "You must set optContentType to one of the following: " . join(", ", @opts) . "\n";
+	   }
+	   
+	}
+
+	# we're being read
+    return $self->{m_OptContentType} if defined($self->{m_OptContentType}) || return undef;
+
+}
+
+sub priv_emsAddElement
+{
+    # Private function that appends to the
+	# $self->{m_EmsElements} array
+    # 
+	# INPUT: name, type, value
+	# OUTPUT: sizeof array after push()
+	
+	# pop value
+    my $self = shift();
+	
+	# build hash
+	my $ems = {};
+	$ems->{"name"} = shift;
+	$ems->{"type"} = shift;
+	$ems->{"value"} = shift;
+    
+	#print "name:" . $ems->{"name"} . "\n";
+	#print "type:" . $ems->{"type"} . "\n";
+	#print "val: " . $ems->{"value"} . "\n";
+	
+	#print "size of elements before push:" . $#{$self->{m_EmsElements}} . "\n";
+	
+	push @{ $self->{m_EmsElements} }, $ems;
+	
+	#print "size of elements after push:" . $#{$self->{m_EmsElements}} . "\n";
+
+	#my $arr = pop @{$self->{m_EmsElements}};
+	#print $arr->{"name"} . "\n";
+	#print $arr->{"type"} . "\n";
+	#print $arr->{"value"} . "\n";
+	
+	#print "size of elements after pop:" . $#{$self->{m_EmsElements}} . "\n";
+	return $#{$self->{m_EmsElements}} + 1;
+	
+}
+
+sub emsAddText
+{
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+	# append content to m_EmsElements with helper function
+	$self->priv_emsAddElement("text", "", shift);
+	
+}
+
+sub emsAddPredefinedSound
+{
+    # EMS Predefined Sound
+	# 0 Chimes high
+	# 1 Chimes low
+	# 2 Ding
+	# 3 Ta Da
+	# 4 Notify
+	# 5 Drum
+	# 6 Claps
+	# 7 Fan Fare
+	# 8 Chords high
+	# 9 Chords low
+	
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+	# check vals
+	my $val = shift;
+	if ($val >= 0 && $val < 10) {
+    	
+		# append content to m_EmsElements with helper function
+	    $self->priv_emsAddElement("sound", "predefined", $val);
+	
+	} else {
+	  
+	    die "You must use a Predefined Sound between 0 and 9. Please see the perldoc.";
+	
+	}
+
+}
+
+sub emsAddPredefinedAnimation
+{
+
+    # EMS Predefined anim
+    # 0 I am ironic, flirty
+    # 1 I am glad
+    # 2 I am sceptic
+    # 3 I am sad
+    # 4 WOW!
+    # 5 I am crying
+    # 6 I am winking
+    # 7 I am laughing
+    # 8 I am indifferent
+    # 9 In love/ kissing
+    # 10 I am confused
+    # 11 Tongue hanging out
+    # 12 I am angry
+    # 13 Wearing glasses
+    # 14 Devil
+
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+	# check vals
+	my $val = shift;
+	if ($val >= 0 && $val < 15) {
+    	
+		# append content to m_EmsElements with helper function
+	    $self->priv_emsAddElement("animation", "predefined", $val);
+	
+	} else {
+	  
+	    die "You must use a Predefined Animation between 0 and 14. Please see the perldoc.";
+	
+	}
+
+}
+
+sub emsAddUserDefinedSound
+{
+    # EMS User Defined Sound
+	# User defined sounds are sent over the air interface. They are monophonic only,
+    # use the iMelody format, and have a maximum length of 128 Bytes (without the
+    # use of the UPI (use the word "join" to concatenate lengthy messages)
+	
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+	
+	# append content to m_EmsElements with helper function
+	$self->priv_emsAddElement("sound", "user", shift);
+
+}
+
+sub emsAddSmallPicture
+{
+	# EMS Small pictures are 16x16 pixels, Black and white
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    # read in image data
+    my $file_path = shift();
+    my $hexResult = '';
+    my $buf;
+
+    open(fh, "< $file_path") || die "Can't open file \"$file_path\"";
+    binmode fh;
+
+    while(read fh, $buf, 1)
+    {
+        $hexResult .= sprintf( "%2.2lX",  ord($buf) );
+    }
+
+    close(fh);
+
+	# append content to m_EmsElements with helper function
+	$self->priv_emsAddElement("picture", "small", $hexResult);
+
+}
+
+sub emsAddSmallPictureHex
+{
+	# EMS Small pictures are 16x16 pixels, Black and white
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+	# append content to m_EmsElements with helper function
+	$self->priv_emsAddElement("picture", "small", shift);
+
+}
+
+sub emsAddLargePicture
+{
+	# EMS Large pictures are 32x32 pixels or of variable size
+	# maximum 128 bytes, where width is a multiple of 8 pixels, Black and white
+	# Larger pictures may be sent, but the word "join" must be placed
+	# in the UPI (user prompt indicator)
+
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    # read in image data
+    my $file_path = shift();
+    my $hexResult = '';
+    my $buf;
+
+    open(fh, "< $file_path") || die "Can't open file \"$file_path\"";
+    binmode fh;
+
+    while(read fh, $buf, 1)
+    {
+        $hexResult .= sprintf( "%2.2lX",  ord($buf) );
+    }
+
+    close(fh);
+
+	# append content to m_EmsElements with helper function
+	$self->priv_emsAddElement("picture", "large", $hexResult);
+
+}
+
+sub emsAddLargePictureHex
+{
+	# EMS Large pictures are 32x32 pixels or of variable size
+	# maximum 128 bytes, where width is a multiple of 8 pixels, Black and white
+	# Larger pictures may be sent, but the word "join" must be placed
+	# in the UPI (user prompt indicator)
+	
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+	# append content to m_EmsElements with helper function
+	$self->priv_emsAddElement("picture", "large", shift);
+
+}
+
+sub emsAddUserPromptIndicator
+{
+    # EMS User Prompt Indicator
+	# This feature introduced in 3GPP TS 23.040 Release 4 allows handsets to stitch
+	# pictures and user-defined sounds. It also allows the user to be prompted upon
+	# reception of the message to execute media specific actions (storage, handset
+	# personalisation, etc.). UPI is typically used by content providers when they send
+	# content to users. Please refer to tables in chapter 4 for more information about
+	# which products support this feature.
+	
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+	# append content to m_EmsElements with helper function
+	$self->priv_emsAddElement("upi", "", shift);
+
+}
+
+############################################
+# End EMS Functionality
+############################################
+
 
 sub requestXML
 {
@@ -1124,7 +1443,7 @@ sub toXML
     #-----------------------------------------------------------------
 
     my $xml =<<ENDXML;
-<?xml version="$self->{m_XMLVersion}"?>
+<?xml version="$self->{m_XMLVersion}" ?>
 <request version="$self->{m_RequestVersion}" protocol="$self->{m_RequestProtocol}" type="$self->{m_RequestType}">
     <user agent="$self->{m_UserAgent}" ip="$self->{m_UserIP}"/>
     <subscriber id="$self->{m_SubscriberID}" password="$self->{m_SubscriberPassword}"/>
@@ -1199,7 +1518,7 @@ ENDXML
     	if (defined($self->msgCarrierID) or defined($self->msgPin) or
 			defined($self->msgFrom) or defined($self->msgCallback) or
 			defined($self->msgText) or defined($self->msgRingtone) or
-			defined($self->{m_MsgImage}) )
+			defined($self->{m_MsgImage}) or defined($self->{m_EmsElements}) )
 		{
     		$xml .= "    <page";
 
@@ -1239,8 +1558,73 @@ ENDXML
 				$xml .= ' image="' . $self->{m_MsgImage} . '"';
 			}
 
-			$xml .= "/>\n";
-        }
+			$xml .= ">\n";
+			
+			# EMS FUNCTIONALITY
+			# Check to see if EMS was added and place it here
+			#print "checking to see if we have ems...\n";
+			
+			if (defined($self->{m_EmsElements}) && $#{$self->{m_EmsElements}} >= 0) {
+			
+			   #print "We have EMS\n";
+			   
+			   # start ems element
+			   $xml .= "\t<ems>\n";
+			   
+			   # add all ems elements
+			   my @arr = @{ $self->{m_EmsElements} };
+			   foreach my $item (@arr) {
+			   
+		           #print $item->{name} . "\n";
+				   $xml .= "<" . $item->{name};
+				   
+				   # if type exists, then add it
+				   if ($item->{type} ne "") {
+				      $xml .= " type=\"" . $self->html_encode($item->{type}) . "\"";
+				   }
+				   
+				   # if value exists, then add it
+				   if ($item->{value} ne "") {
+				      $xml .= " value=\"";
+					  
+					  # if type is text, unicode escape
+					  if ($item->{name} eq "text") {
+ 				      
+					     $xml .= $self->unicode_encode($item->{value});   				  
+					  
+					  } elsif ($item->{name} eq "sound") {
+					     
+						 # sounds need to only have newlines escaped
+						 my $tmp = $item->{value};
+						 $tmp =~ s/\n/&#10;/g;
+						 $tmp =~ s/\r\n/&#10;/g;
+						 $xml .= $tmp;
+					     #$xml .= $self->unicode_encode($item->{value});						 
+						 
+					  } else {
+				      
+					     $xml .= $self->html_encode($item->{value});
+					  
+					  }
+					  
+					  $xml .= "\"";
+					  
+				   }
+				   
+				   # end element
+				   $xml .= "/>\n";
+			   
+			   } # foreach loop
+			   
+			   # end ems tag
+			   $xml .= "\t</ems>\n";
+						   
+			}
+			# End EMS
+
+		    $xml .= "    </page>\n";
+			
+        } # End page element
 
     }
 
@@ -2071,11 +2455,11 @@ sub send
 
 	if($self->{DEBUG})
 	{
-		#print "@ SEND\n";
-		#print "Client Status Code: $self->{m_ClientStatusCode}\n";
-		#print "Client Status Desc: $self->{m_ClientStatusDesc}\n";
-		#print "m_ErrorCode == " . $self->errorCode . "\n";
-		#print "m_ErrorDesc == " . $self->errorDesc . "\n";
+		print "@ SEND\n";
+		print "Client Status Code: $self->{m_ClientStatusCode}\n";
+		print "Client Status Desc: $self->{m_ClientStatusDesc}\n";
+		print "m_ErrorCode == " . $self->errorCode . "\n";
+		print "m_ErrorDesc == " . $self->errorDesc . "\n";
 	}
 
 
@@ -2098,6 +2482,14 @@ sub send
     	if (defined($txt))
 		{
 			$txt =~ s/^.*<\?xml/<\?xml/gs;
+                        if ($^O eq "MSWin32") {
+				if ($txt =~ s/.land Mobiltelefon AB/ land Mobiltelefon AB/) {
+	                                #print "Found plus sign\n";
+	                        }
+				if ($txt =~ s/[éçõÔÉó]/_/g) {
+	                               #print "Found bad char\n";
+	                        }
+                        }
 
         	$self->xmlParseEx($txt);
         	return 1;
@@ -2200,6 +2592,316 @@ else
     print "Error Description: " . $sms->errorDesc() . "\n";
     print "Error Resolution: " . $sms->errorResolution() . "\n";
 }
+
+=head1 EMS (Enhanced Message Service)
+
+Quick start for EMS:
+
+    $sms->optContentType("ems");
+    $sms->emsAddPredefinedSound(1);
+    $sms->emsAddPredefinedAnimation(1);
+    $sms->emsAddSmallPicture("example.gif");
+    $sms->emsAddText("This is an EMS from Simplewire!");
+
+Simplewire supports sending EMS messages via its network. The Enhanced 
+Messaging Service (EMS) uses standard SMS and allows the user
+to add fun visual and audible content to their message. For example, 
+simple animations, pictures, melodies, sounds and even formatting of 
+the text itself, everything mixed together seamlessly into one message.
+
+To activate EMS add the following line to your code:
+
+    $sms->optContentType("ems");
+
+This is a summary of the EMS functions built-in to this SDK:
+
+    emsAddText()
+    emsAddPredefinedSound()
+    emsAddPredefinedAnimation()
+    emsAddUserDefinedSound()
+    emsAddSmallPicture()
+    emsAddSmallPictureHex()
+    emsAddLargePicture()
+    emsAddLargePictureHex()
+    emsAddUserPromptIndicator()
+
+SMS, and therefore EMS, are not actually sent from handset across the 
+mobile network to handset as it appears to users, but instead messages 
+are sent from handsets, or from Simplewire's network, to a Short 
+Message Service Center (SMSC) resident on the Operator’s network, and 
+then on to the receiving handset.
+
+EMS has a ‘Store and Forward’ model – i.e. messages are forwarded to the
+receiving handset as soon as it is reachable, and a user does not have to access
+a network-based inbox to receive messages. Indeed EMS’s can be received whilst
+a handset is making a voice call, browsing the Internet, etc. Further, delivery
+reporting is also supported to enable a user to check that a message has been
+successfully delivered.
+
+Therefore, EMS has many advantages as a messaging platform for the mobile
+world, where convenience and ease of use are key.
+
+=head2 Pictures
+
+    # 16x16 image, black and white
+    $sms->emsAddSmallPicture("example.gif");
+
+    # 32x32 image, black and white
+    $sms->emsAddLargePicture("large.gif");
+
+	
+Pictures are contained within a single SM (Short Message, or ‘segment’ if
+describing an SM that is part of a concatenated message). It is possible to
+include either small (16*16 pixels) or large (32*32 pixels). Larger
+pictures may be sent by joining small pictures together using the 
+emsAddUserPromptIndicator() function. Please see below for UPI description.
+
+EMS Release 4 supports black and white pictures. All pictures are user defined –
+i.e. although they are either stored on the handset during manufacture,
+downloaded, or stored from other messages, they are called user-defined as the
+picture itself is sent over the air (see various ‘predefined’ media detailed below).
+
+Simplewire's network will convert color GIF images into black and white
+automatically using a method that takes any color above 50% brightness and turning it
+to white, and anything below 50% brightness to black. So #999999 is converted
+to white, while #336699 is converted to black. Of course this example is
+representing colors using the standard web pallette, but you get the idea.
+
+For exact image recreation, use Photoshop or another editing program to 
+convert your image to black and white.
+
+=head2 Animations
+
+    # I am laughing
+    $sms->emsAddPredefinedAnimation(7);
+
+There are a number of predefined animations. These animations are not sent
+over the air interface, only the identification of them. Basically the originating
+terminal sends an instruction to the receiving terminal to play, say, pre-defined
+animation number 9.
+
+As soon as the position of the animation in the SM data is reached, the animation
+corresponding to the received number is displayed in a manner which is
+manufacturer specific. Animations are played as soon they are focused.
+There are 6 predefined animations in Release 4.1.0 (0-5) of EMSI and 
+additional 9 ones as of Release 4.3.0 (0-14) of EMSI. Please find an 
+overview of all these predefined animations below:
+
+=head3 Animation Description
+
+    0 I am ironic, flirty
+    1 I am glad
+    2 I am sceptic
+    3 I am sad
+    4 WOW!
+    5 I am crying
+    6 I am winking
+    7 I am laughing
+    8 I am indifferent
+    9 In love/ kissing
+    10 I am confused
+    11 Tongue hanging out
+    12 I am angry
+    13 Wearing glasses
+    14 Devil
+
+=head2 Sounds
+
+These may be inserted into text messages to provide audible indications and
+experiences to the recipient. When they are received, they are played by the
+receiving handset at an appropriate point in the message.
+
+=head3 Predefined
+
+    # Play the Drums
+    $sms->emsAddPredefinedSound(5);
+
+There are a number of predefined sounds. These sounds are not transferred over
+the air interface, only the identification of them. There are 10 different sounds
+that can be added in the message, and as soon as the sound mark is in focus (on
+the display), the sound will be played.
+
+Below please find an overview of all these predefined sounds:
+
+    0 Chimes high
+    1 Chimes low
+    2 Ding
+    3 Ta Da
+    4 Notify
+    5 Drum
+    6 Claps
+    7 Fan Fare
+    8 Chords high
+    9 Chords low
+
+=head3 User Defined
+
+    # Play my sound
+    $sms->emsAddUserDefinedSound("MELODY:*5c5*5e4*5c5*5e4*4e5*4g4*4e5");
+
+User defined sounds are sent over the air interface. They are monophonic only,
+use the iMelody format, and have a maximum length of 128 Bytes without the
+use of the UPI (see the UPI section below). Please note, we have found
+that many EMS phones do not support UPI for user defined melodies.
+
+We have found that the following format, although based on the EMSI standard,
+bloats the melody data heavily, and is not needed. The MELODY: line item
+is typically all you need. 
+
+For example, this will work fine:
+
+    MELODY:*5f3r4*5f4*5c4r4*5f1r3*4#g3*4a2*5c3*4f2r3*4a4*5c4*5f3
+
+Rather than:
+
+    BEGIN:IMELODY
+	VERSION:1.2
+	FORMAT:CLASS1.0
+	NAME:A-Team Theme Song
+	MELODY:*5f3r4*5f4*5c4r4*5f1r3*4#g3*4a2*5c3*4f2r3*4a4*5c4*5f3
+	END:IMELODY
+
+The official format of the iMelody is constituted of a header, the melody and a footer.
+
+=head4 Header
+
+    Desc:      “BEGIN:IMELODY”<cr><line-feed>
+    Example:   “BEGIN:IMELODY”<cr><line-feed>
+    Status:    Mandatory
+
+    Desc:      “VERSION:”<version><cr><line-feed>
+    Example:   “VERSION:1.2”<cr><line-feed> 
+    Status:    Mandatory (We've found this to be optional)
+
+    Desc:      “FORMAT:”<format><cr><linefeed>
+    Example:   “FORMAT:CLASS1.0”<cr><line-feed> 
+    Status:    Mandatory (We've found this to be optional)
+
+    Desc:      “NAME:”<characters-notlf><cr><line-feed>
+    Example:   “NAME:My song”<cr><line-feed> 
+    Status:    Optional
+
+    Desc:      “COMPOSER:”<characters-notlf><cr><line-feed>
+    Example:   “COMPOSER:John Doe”<cr><line-feed> 
+    Status:    Optional
+
+    Desc:      “BEAT:”<beat><cr><line-feed> 
+    Example:   “BEAT:240”<cr><line-feed> 
+    Status:    Optional
+
+    Desc:      “STYLE:”<style><cr><line-feed>
+    Example:   “STYLE:S2”<cr><line-feed> 
+    Status:    Optional
+
+    Desc:      “VOLUME:”<volume><cr><linefeed>
+    Example:   “VOLUME:V8”<cr><line-feed> 
+    Status:    Optional
+
+    <format> ::= “CLASS1.0”
+    iMelody also defines a "CLASS2.0" format.
+
+    <beat>::="25" | "26" | "27" | ... | "899" | "900"
+    <style>::= "S0" | "S1" | "S2"
+    <volume-modifier>::=”V+”|”V-“ (changes volume + or – from current volume)
+    <volume>::="V0" | "V1" | ... | "V15" |<volume-modifier>
+    <characters-not-lf> ::= ’Any character in the ASCII character-set except <line-feed>.’
+
+=head4 Footer
+
+    Desc:      “END:IMELODY”<cr><line-feed> 
+    Example:   “END:IMELODY”<cr><line-feed> 
+    Status:    Mandatory
+
+=head4 Melody
+
+    Desc:      “MELODY:”<melody><cr><linefeed>
+    Example:   “MELODY:c2d2e2f2”<cr><line-feed> 
+    Status:    Mandatory
+
+The melody is composed as follow:
+    <melody> ::= { <silence> | <note> | <led> | <vib> | <backlight> | <repeat> |
+    <volume> }+
+    <volume-modifier>::=”V+”|”V-“ (changes volume + or – from current volume)
+    <volume>::="V0" | "V1" | ... | "V15" |<volume-modifier>
+    <led> ::= “ledoff” | “ledon”
+    <vibe> ::= “vibeon” | “vibeoff”
+    <backlight> ::= “backon” | “backoff”
+    <repeat> ::= “(“ | “)” | “@”<repeat-count>
+    <repeat-count> ::= “0” | “1” | ...
+    <silence> ::= “r”<duration>[<duration-specifier>]
+    <note> ::= [<octave-prefix>]<basic-ess-iss-note><duration>[<duration-specifier>]
+    <duration> := “0” | “1” | “2” | “3” | “4” | “5”
+    <duration-specifier> ::= “.” | “:” | “;”
+    <octave-prefix> ::= “*0” | “*1” | ... | “*8” (A=55Hz) | (A=110Hz) | ... |
+    (A=14080Hz)
+    <basic-ess-iss-note> ::= <basic-note> | <ess-note> | <iss-note>
+    <basic-note> ::= “c’” | “d” | “e” | “f” | “g” | “a” | “b”
+    <ess-note> ::= “&d” | “&e” | “&g” | “&a” | “&b”
+    <iss-note> ::= “#c” | “#d” | “#f” | “#g” | “#a”
+
+Duration
+
+    Value Duration
+    0     Full-note
+    1     ½-note
+    2     ¼-note
+    3     1/8-note
+    4     1/16-note
+    5     1/32-note
+
+Duration Specifier
+
+    Value Duration
+          No special duration
+    .     Dotted note
+    :     Double dotted note
+    ;     2/3 length
+
+The octave prefix only applies to the immediately following note. 
+If not specified, the default octave-prefix is *4. i.e. A=880Hz.
+
+The repeat blocks cannot be nested in this simple CLASS1.0 definition.
+The default character set is UTF-8.
+
+The maximum length for a melody is 128 bytes (this includes the melody header
+and footer).
+
+Example of a «CLASS1» iMelody object:
+
+    Mandatory Header       BEGIN:IMELODY
+                           VERSION:1.2
+                           FORMAT:CLASS1.0
+    Mandatory Melody       MELODY:&b2#c3V–c2*4g3d3V+#d1r3d2e2:d1V+f2f3.
+    Mandotory Footer       END:IMELODY
+
+=head2 Concatenation
+
+    # Concatenate three SMS messages to make one
+    # Each SMS can contain 140 bytes, and we've
+    # added enough content to take up 320 bytes
+    # 140 bytes - 1st message
+    # 140 bytes - 2nd message
+    # 40 bytes  - 3rd message
+    $sms->emsAddUserPromptIndicator(3);
+
+The Simplewire network supports concatenated EMS messages – the ability
+for the SMS handset to automatically combine several Short Messages. This feature is
+extremely useful because of the restrictions on the amount of information that
+an SMS can carry - in GSM the amount of information that can be carried within
+an SMS is only 140 bytes.
+
+The handset is therefore able to both send and receive longer, richer messages.
+The Standard allows up to 255 messages to be concatenated into one, however,
+current phones support anywhere between 3 and 10 segments, and each
+handset should be investigated for its level of support.
+
+=head2 User Prompt Indicator
+
+This feature introduced in 3GPP TS 23.040 Release 4 allows handsets to stitch
+pictures and user-defined sounds. It also allows the user to be prompted upon
+reception of the message to execute media specific actions (storage, handset
+personalisation, etc.).
+
 
 =head1 UNICODE
 
