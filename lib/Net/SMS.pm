@@ -1,9 +1,9 @@
 ########################################################################
-# Copyright (c) 2001 SimpleWire. All rights reserved. This program is free
+# Copyright (c) 2001 Simplewire. All rights reserved. This program is free
 # software; you can redistribute it and/or modify it under the same terms
 # as Perl itself.
 #
-# Net::SMS.pm, version 2.00
+# Net::SMS.pm, version 2.10
 #
 # Net::SMS is a global short text messaging service interface via the
 # Internet.  It brings you the first and only way to send SMS messages
@@ -12,7 +12,9 @@
 # technology can be better utilized.
 #
 # Net::SMS 1.00 Release: 10/05/2000
-# Net::SMS 2.00 Release  03/23/2001
+# Net::SMS 2.00 Release: 03/23/2001
+# Net::SMS 2.10 Release: 04/14/2001
+# Net::SMS 2.12 Release: 04/16/2001
 ############################################################################
 
 #---------------------------------------------------------------------
@@ -25,7 +27,7 @@ package Net::SMS;
 #---------------------------------------------------------------------
 # Version Info
 #---------------------------------------------------------------------
-$Net::SMS::VERSION = '2.00';
+$Net::SMS::VERSION = '2.13';
 require 5.002;
 
 #---------------------------------------------------------------------
@@ -33,9 +35,7 @@ require 5.002;
 #---------------------------------------------------------------------
 use strict;
 use XML::DOM;
-use HTTP::Request::Common;
-use HTTP::Headers;
-use LWP::UserAgent;
+use Net::SMS::HTTP;
 
 ######################################################################
 # Net::SMS->new();
@@ -62,6 +62,7 @@ sub new {
         RPC_CEILING             => 20,
         RPC_PROTOCOL            => 'http://',
         RPC_PAGING_URL          => '/paging/rpc.xml',
+        RPC_BEG_RESPONSE        => '<?xml version="1.0" ?>',
         RPC_END_RESPONSE        => '</response>',
         LAST_ERROR_CODE         => '',
         LAST_ERROR_DESCRIPTION  => '',
@@ -72,9 +73,9 @@ sub new {
         RESPONSE_TYPE           => '',
 		RESPONSE_VERSION        => '2.0',
         RESPONSE_PROTOCOL       => 'paging',
-		USER_AGENT 		  		=> 'Perl/SMS/2.00',
-        USER_IP     		  	=> '',
-        SUBSCRIBER_ID   	  	=> '',
+		USER_AGENT 				=> 'Perl/SMS/2.1.3',
+        USER_IP     			=> '',
+        SUBSCRIBER_ID   		=> '',
         SUBSCRIBER_PASSWORD		=> '',
         TIMEOUT					=> '30',
         SERVICE_ID              => '',
@@ -388,12 +389,10 @@ sub userIP {
 }
 
 sub userAgent {
-    my $self = shift();
+    
+    # Deprecated userAgent version 2.13
+	my $self = shift();
     die "You must instantiate an object to use this function" if !(ref($self));
-
-    my $var = shift();
-
-    if (defined($var)) { $self->{USER_AGENT} = $var; }
 
     return $self->{USER_AGENT};
 
@@ -447,7 +446,7 @@ ENDXML
 
 			# Set the method option
 			if (defined($self->msgTicketID)) {
-                $xml .= ' id="' . $self->msgTicketID . '"';
+                $xml .= ' id="' . encode_entity($self->msgTicketID) . '"';
             }
 
 			$xml .= "/>\n";
@@ -486,7 +485,7 @@ ENDXML
 
     		# Set the delimiter option
             if (defined($self->optDelimiter)) {
-                $xml .= ' delimiter="' . $self->optDelimiter . '"';
+                $xml .= ' delimiter="' . encode_entity($self->optDelimiter) . '"';
             }
 
 			$xml .= "/>\n";
@@ -499,23 +498,23 @@ ENDXML
 
 
 			if (defined($self->msgCarrierID)) {
-                $xml .= ' serviceid="' . $self->msgCarrierID . '"';
+                $xml .= ' serviceid="' . encode_entity($self->msgCarrierID) . '"';
             }
 
             if (defined($self->msgPin)) {
-                $xml .= ' pin="' . $self->msgPin . '"';
+                $xml .= ' pin="' . encode_entity($self->msgPin) . '"';
             }
 
             if (defined($self->msgFrom)) {
-                $xml .= ' from="' . $self->msgFrom . '"';
+                $xml .= ' from="' . encode_entity($self->msgFrom) . '"';
             }
 
             if (defined($self->msgCallback)) {
-                $xml .= ' callback="' . $self->msgCallback . '"';
+                $xml .= ' callback="' . encode_entity($self->msgCallback) . '"';
             }
 
             if (defined($self->msgText)) {
-                $xml .= ' text="' . $self->msgText . '"';
+                $xml .= ' text="' . encode_entity($self->msgText) . '"';
             }
 
 			$xml .= "/>\n";
@@ -574,7 +573,7 @@ sub xmlParseEx {
         #-----------------------------------------------------------------
 	my $response_version = $response->getAttributeNode("version");
 
-    if ($response_version eq undef) {
+    if (!defined($response_version)) {
         $doc->dispose();
         $self->raise_error(103);
         return;
@@ -588,7 +587,7 @@ sub xmlParseEx {
     #-----------------------------------------------------------------
 	my $response_protocol = $response->getAttributeNode("protocol");
 
-    if ($response_protocol eq undef) {
+    if (!defined($response_protocol)) {
         $doc->dispose();
         $self->raise_error(104);
         return;
@@ -602,7 +601,7 @@ sub xmlParseEx {
     #-----------------------------------------------------------------
 	my $response_type = $response->getAttributeNode("type");
 
-    if ($response_type eq undef) {
+    if (!defined($response_type)) {
         $doc->dispose();
         $self->raise_error(105);
         return;
@@ -613,9 +612,9 @@ sub xmlParseEx {
     if ($type eq "sendpage") {
         $self->{RESPONSE_TYPE} = "sendpage";
     } elsif ($type eq "checkstatus") {
-	$self->{RESPONSE_TYPE} = "checkstatus";
+		$self->{RESPONSE_TYPE} = "checkstatus";
     } elsif ($type eq "servicelist") {
-	$self->{RESPONSE_TYPE} = "servicelist";
+		$self->{RESPONSE_TYPE} = "servicelist";
     } else {
         $self->raise_error(106);
         return;
@@ -634,11 +633,11 @@ sub xmlParseEx {
         # Now get attributes for the error element
 
         #-----------------------------------------------------------------
-	# Parse <error> code attribute
+		# Parse <error> code attribute
         #-----------------------------------------------------------------
 		my $error_code = $error->getAttributeNode("code");
 
-	    if ($error_code ne undef) {
+	    if (defined($error_code)) {
         	$self->errorCode($error_code->getValue());
 	    }
 
@@ -647,7 +646,7 @@ sub xmlParseEx {
 	    #-----------------------------------------------------------------
 		my $error_dscr = $error->getAttributeNode("description");
 
-	    if ($error_dscr ne undef) {
+	    if (defined($error_dscr)) {
         	$self->errorDesc($error_dscr->getValue());
 	    }
 	}
@@ -671,7 +670,7 @@ sub xmlParseEx {
 	    #-----------------------------------------------------------------
 		my $status_code = $status->getAttributeNode("code");
 
-	    if ($status_code ne undef) {
+	    if (defined($status_code)) {
         	$self->status_code($status_code->getValue());
 	    }
 
@@ -680,7 +679,7 @@ sub xmlParseEx {
 	    #-----------------------------------------------------------------
 		my $status_dscr = $status->getAttributeNode("description");
 
-	    if ($status_dscr ne undef) {
+	    if (defined($status_dscr)) {
         	$self->status_description($status_dscr->getValue());
 	    }
 	}
@@ -702,7 +701,7 @@ sub xmlParseEx {
 	    #-----------------------------------------------------------------
 		my $ticket_id = $ticket->getAttributeNode("id");
 
-	    if ($ticket_id ne undef) {
+	    if (defined($ticket_id)) {
         	$self->msgTicketID($ticket_id->getValue());
 	    }
 	}
@@ -714,114 +713,138 @@ sub xmlParseEx {
 
     my $services = $doc->getElementsByTagName("service");
 
+    # If Services Greater Than 1 Then Reset Service List
+    if ($services->getLength() > 0) {
+		$self->{SERVICE_LIST} = [];
+    }
+
     for (my $index = 0; $index < $services->getLength(); $index++) {
 
 		my $service = $services->item($index);
 
-        # Construct a hash to put all the shit into
+        # Construct a hash to put all the services into
         my $s = {};
 
 		my $id = $service->getAttributeNode("id");
 
-	    if ($id ne undef) {
+	    if (defined($id)) {
         	$s->{ID} = $id->getValue();
 	    }
 
         my $title = $service->getAttributeNode("title");
 
-	    if ($title ne undef) {
+	    if (defined($title)) {
         	$s->{Title} = $title->getValue();
 	    }
 
         my $subtitle = $service->getAttributeNode("subtitle");
 
-	    if ($subtitle ne undef) {
+	    if (defined($subtitle)) {
         	$s->{SubTitle} = $subtitle->getValue();
 	    }
 
         my $contenttype = $service->getAttributeNode("contenttype");
 
-	    if ($contenttype ne undef) {
+	    if (defined($contenttype)) {
         	$s->{ContentType} = $contenttype->getValue();
 	    }
 
         my $pinrequired = $service->getAttributeNode("pinrequired");
 
-	    if ($pinrequired ne undef) {
+	    if (defined($pinrequired)) {
         	$s->{PinRequired} = $pinrequired->getValue();
 	    }
 
         my $pinminlength = $service->getAttributeNode("pinminlength");
 
-	    if ($pinminlength ne undef) {
+	    if (defined($pinminlength)) {
         	$s->{PinMinLength} = $pinminlength->getValue();
 	    }
 
         my $pinmaxlength = $service->getAttributeNode("pinmaxlength");
 
-	    if ($pinmaxlength ne undef) {
+	    if (defined($pinmaxlength)) {
         	$s->{PinMaxLength} = $pinmaxlength->getValue();
 	    }
 
         my $textrequired = $service->getAttributeNode("textrequired");
 
-	    if ($textrequired ne undef) {
+	    if (defined($textrequired)) {
         	$s->{TextRequired} = $textrequired->getValue();
 	    }
 
         my $textminlength = $service->getAttributeNode("textminlength");
 
-	    if ($textminlength ne undef) {
+	    if (defined($textminlength)) {
         	$s->{TextMinLength} = $textminlength->getValue();
 	    }
 
         my $textmaxlength = $service->getAttributeNode("textmaxlength");
 
-	    if ($textmaxlength ne undef) {
+	    if (defined($textmaxlength)) {
         	$s->{TextMaxLength} = $textmaxlength->getValue();
 	    }
 
         my $fromrequired = $service->getAttributeNode("fromrequired");
 
-	    if ($fromrequired ne undef) {
+	    if (defined($fromrequired)) {
         	$s->{FromRequired} = $fromrequired->getValue();
 	    }
 
         my $fromminlength = $service->getAttributeNode("fromminlength");
 
-	    if ($fromminlength ne undef) {
+	    if (defined($fromminlength)) {
         	$s->{FromMinLength} = $fromminlength->getValue();
 	    }
 
         my $frommaxlength = $service->getAttributeNode("frommaxlength");
 
-	    if ($frommaxlength ne undef) {
+	    if (defined($frommaxlength)) {
         	$s->{FromMaxLength} = $frommaxlength->getValue();
 	    }
 
         my $callbackrequired = $service->getAttributeNode("callbackrequired");
 
-	    if ($callbackrequired ne undef) {
+	    if (defined($callbackrequired)) {
         	$s->{CallbackRequired} = $callbackrequired->getValue();
 	    }
 
         my $callbacksupported = $service->getAttributeNode("callbacksupported");
 
-	    if ($callbacksupported ne undef) {
+	    if (defined($callbacksupported)) {
         	$s->{CallbackSupported} = $callbacksupported->getValue();
 	    }
 
         my $callbackminlength = $service->getAttributeNode("callbackminlength");
 
-	    if ($callbackminlength ne undef) {
+	    if (defined($callbackminlength)) {
         	$s->{CallbackMinLength} = $callbackminlength->getValue();
 	    }
 
-         my $callbackmaxlength = $service->getAttributeNode("callbackmaxlength");
+        my $callbackmaxlength = $service->getAttributeNode("callbackmaxlength");
 
-	    if ($callbackmaxlength ne undef) {
+	    if (defined($callbackmaxlength)) {
         	$s->{CallbackMaxLength} = $callbackmaxlength->getValue();
 	    }
+
+		# New Carrier Recognition Functions
+		my $country_code = $service->getAttributeNode("countrycode");
+
+        if (defined($country_code)) {
+        	$s->{CountryCode} = $country_code->getValue();
+        }
+
+		my $country_name = $service->getAttributeNode("countryname");
+
+        if (defined($country_name)) {
+        	$s->{CountryName} = $country_name->getValue();
+        }
+
+		my $country_reg = $service->getAttributeNode("countryregion");
+
+		if (defined($country_reg)) {
+        	$s->{CountryRegion} = $country_reg->getValue();
+    	}
 
 		##############################################################
         # Now push hash onto service_list array
@@ -838,9 +861,20 @@ sub xmlParseEx {
 
 sub escape {
     shift() if ref($_[0]);
-    my $toencode = shift;
+    my $toencode = shift();
     return undef unless defined($toencode);
     $toencode=~s/([^a-zA-Z0-9_.-])/uc sprintf("%%%02x",ord($1))/eg;
+    return $toencode;
+}
+
+sub encode_entity {
+    shift() if ref($_[0]);
+    my $toencode = shift();
+    return undef unless defined($toencode);
+    $toencode =~ s/&/&amp;/g;
+    $toencode =~ s/>/&gt;/g;
+    $toencode =~ s/</&lt;/g;
+    $toencode =~ s/"/&quot;/g;
     return $toencode;
 }
 
@@ -879,58 +913,51 @@ sub raise_error {
             $self->errorDesc("The client tool does not know how to handle the type of response.");
 	    	last SWITCH;
 		};
+
+        (/107/) && do {
+            $self->errorDesc("A connection could not be made with the Simplewire network.");
+	    	last SWITCH;
+		};
     }
 
 }
 
 sub send {
-    my $self = shift();
+    
+	my $self = shift();
     die "You must instantiate an object to use this function" if !(ref($self));
-    $self->{REQUEST_TYPE} = shift();
 
-    my $content = "";
-
-    my $connected = 0;
-    my $return = 0;
-    my @lines;
-    my @tmp;
-    my $txt;
-
-    $content = $self->escape($self->xml);
+	$self->{REQUEST_TYPE} = shift();
+    my $txt = "";
+    my %vars = (
+		"xml" => $self->xml()
+	);
 
     ##################################################################
-    # Create UserAgent object to send/retrieve from paging server
+    # Create Net::SMS::HTTP Object
     ##################################################################
-    my $ua = new LWP::UserAgent;
-    $ua->agent($self->{USER_AGENT});
-    $ua->timeout($self->{OPTION_TIMEOUT});
+    my $http = new Net::SMS::HTTP;
 
     ##################################################################
-    # Construct request object that we will use and just modify uri
-    ##################################################################
-    my $req = new HTTP::Request("POST", "");
-    $req->content_type('application/x-www-form-urlencoded');
-    $req->content("xml=" . $content);
-
-
-    ##################################################################
-    # Begin loop while checking redundancy
+    # Begin loop for redundancy
     ##################################################################
     my $index = "";
-    my $server_name = "";
-    my $response;
+    my $response = undef;
 
 	do {
 		do {
-
 	    	##########################################################
             # Create the url to retrieve
             ##########################################################
-            $server_name = $self->{RPC_SERVER_NAME} . $index . "." . $self->{RPC_SERVER_DOMAIN};
+            my $server_name = $self->{RPC_SERVER_NAME} . $index . "." . $self->{RPC_SERVER_DOMAIN};
 			my $full_file = $self->{RPC_PROTOCOL} . $server_name . $self->{RPC_PAGING_URL};
-            $req->uri($full_file);
-			$response = $ua->simple_request($req);
 
+            ##########################################################
+            # Request and get response
+            ##########################################################
+            $http->reset();
+            $http->prepare_post(\%vars);
+            $response = $http->request($full_file);
 
             ##########################################################
             # Increment the server number
@@ -941,16 +968,33 @@ sub send {
 				$index++;
 			}
 
-		} while ( !($response->is_success()) and ($index <= $self->{RPC_CEILING}) );
+		} while ( (defined($response) && $response != 200) && ($index <= $self->{RPC_CEILING}) );
 
-        $txt = $response->content();
+        if (defined($http)) {
+			$txt = $http->response();
+        } else {
+            $txt = "";
+        }
 
-	} until ( ($txt =~ /$self->{RPC_END_RESPONSE}/) or ($index >= $self->{RPC_CEILING}) );
+	} until ( (defined($txt) && $txt =~ /$self->{RPC_END_RESPONSE}/) || (defined($index) && $index >= $self->{RPC_CEILING}) );
 
-	# Construct the file request
-    my $ret_txt = $txt;
-    $self->xmlParseEx($txt);
-    return $ret_txt;
+    if (defined($txt) && $txt eq "") {
+    	$self->raise_error(107);
+        return 0;
+	} else {
+    	# Cleanup text
+    	if (defined($txt)) {
+			$txt =~ s/^.*<\?xml/<\?xml/gs;
+
+            #print $txt . "\n";
+
+        	$self->xmlParseEx($txt);
+        	return 1;
+        } else {
+        	$self->raise_error(107);
+            return 0;
+        }
+    }
 }
 
 1;

@@ -1,7 +1,4 @@
-
-                        Net::SMS, version 2.00
-
-Copyright (c) 2001 SimpleWire. All rights reserved. This program is free
+Copyright (c) 2001 Simplewire. All rights reserved. This program is free
 software; you can redistribute it and/or modify it under the same terms
 as Perl itself.
 
@@ -37,7 +34,6 @@ www.simplewire.com
     The following packages are required in order to run or even install
     Net::SMS.
 
-      * LWP::UserAgent >= 5.47
       * XML::DOM (libxml-enno) >= 1.02
 
   Features in 2.00
@@ -146,8 +142,3 @@ www.simplewire.com
 
     If you have any other questions please visit Simplewire's FAQ or online
     support forum for anwers.
-
-----------------------------------------------------------------------
-
-Released: 3/24/2000
-Coded By: Joe Lauer <joelauer@simplewire.com>

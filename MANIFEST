@@ -1,5 +1,10 @@
-ChangeLog
+ChangeLog.txt
 MANIFEST
 Makefile.PL
 README
 lib/Net/SMS.pm
+lib/Net/SMS/HTTP.pm
+examples/sendsms.pl
+examples/sendsms2.pl
+examples/hello.pl
+examples/carrierlist.pl

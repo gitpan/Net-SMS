@@ -1,4 +1,4 @@
-#!/usr/bin/perl -I ./
+#!/usr/bin/perl -I ../lib
 
 use Net::SMS;
 
@@ -6,8 +6,8 @@ use Net::SMS;
 my $r = Net::SMS->new();
 
 # Setup the SMS message parameters
-$r->msgCarrierID(7);
-$r->msgPin("4152224444");
+$r->msgCarrierID("82");
+$r->msgPin("100-510-1234");
 $r->msgFrom("Demo");
 $r->msgCallback("3124445555");
 $r->msgText("Hello World from Simplewire!");

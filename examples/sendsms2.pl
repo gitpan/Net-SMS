@@ -3,19 +3,10 @@
 use Net::SMS;
 
 # Create a new SMS object
-my $r = Net::SMS->new();
-
-# Create a new SMS Request object
-
-# Set request type
+my $sms = Net::SMS->new();
 
 # Set your SUBSCRIBER ID here that Simplewire provided you as signup 
-$r->subscriberID("K1F-3G4-XXX-XXXXX");
-
-# Set the IP Address of the person you are peforming this request on
-# the behalf of. This is optional
-$r->userIP("56.78.90.45");
-
+$sms->subscriberID("");
 
 ######################################################################
 # Set the options for this request, which are specific to sendpage
@@ -23,7 +14,7 @@ $r->userIP("56.78.90.45");
 
 # This overrides simplewire's default delimiter of the " |" to seperate
 # a callback, from, and text in the final message sent to users.
- $r->optDelimiter(" |");
+ $sms->optDelimiter(" |");
 
 #!!!!!
 # This allows you to send asynchronous or sychronous pages thru
@@ -35,7 +26,7 @@ $r->userIP("56.78.90.45");
 # before sending out the final message.  A TICKET_ID can later be used
 # to see what the final status of that message was.
 
-$r->synchronous(1);
+$sms->synchronous(1);
 
 
 ######################################################################
@@ -45,22 +36,29 @@ $r->synchronous(1);
 # The service id is proprietary to simplewire and you will have to
 # check out our service list via our website (www.simplewire.com) or
 # by checking out our servicelist.pl script.
-$r->msgCarrierID(7);
 
 # Set parameters of message
-$r->msgPin("3135551212");
-$r->msgFrom("Bob");
-$r->msgCallback("3135551212");
-$r->msgText("Demo Using Simplewire!");
-$r->msgSend();
+$sms->msgPin("100-510-1234");
+$sms->msgFrom("Bob");
+$sms->msgCallback("3135551212");
+$sms->msgText("Demo Using Simplewire > <!");
+$sms->msgSend();
 
 # Check out what happened
-if ($r->success) {
+if ($sms->success) {
     print "Message was successfully sent via Simplewire!\n";
+
+	# Carrier Recognition
+	@services = $sms->carrierList();
+	if (@services > 0) {
+		print "Used " . $services[0]->{Title} . " located in ";
+		print $services[0]->{CountryRegion} . ", " . $services[0]->{CountryName} . "\n";
+	}
+
 } else {
     print "Message was not successfully sent via Simplewire!\n";
-    print "Error Code: " . $r->errorCode . "\n";
-    print "Error Description: " . $r->errorDesc . "\n";
+    print "Error Code: " . $sms->errorCode . "\n";
+    print "Error Description: " . $sms->errorDesc . "\n";
 }
 
 
