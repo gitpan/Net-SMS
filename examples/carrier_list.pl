@@ -1,3 +1,5 @@
+#!/usr/bin/perl -I ../lib
+
 ###################################################################
 #  Copyright (c) 1999-2001 Simplewire, Inc. All Rights Reserved.
 # 
@@ -28,39 +30,40 @@
 # 
 #  Please visit www.simplewire.com for sales and support.
 # 
-#  @author Vidal Borromeo
-#  @version 2.4.0
+#  @author Simplewire, Inc.
+#  @version 2.4.1
 ###################################################################
 
-#!/usr/bin/perl -I ../lib
-
+# Import Module
 use Net::SMS;
 
-# Instantiate new SMS object
+# Create Object
 my $sms = Net::SMS->new();
 
-$sms->optFields("selectbox");
+# Subscriber Settings
+$sms->subscriberID("123-456-789-12345");
+$sms->subscriberPassword("Password Goes Here");
 
-# Send the request now
+print "Retrieving carrier list from Simplewire...\n";
+
+# Retrieve Carrier List
 $sms->carrierListSend();
 
-
 # Check For Errors
-if ($sms->success)
+if ($sms->success()) 
 {
-    print "Service List successfully downloaded!\n";
+    print "Carrier list retrieved!\n";
+
+	@services = $sms->carrierList();
+
+	foreach $row (@services) {
+	    print $row->{ID} . ": " . $row->{Title} . "\n";
+	}
 }
 else
 {
-   print "Service List could not be successfully downloaded!\n";
-   print "Error Code: " . $sms->errorCode . "\n";
-   print "Error Description: " . $sms->errorDesc . "\n";
-   exit(1);
-}
-
-# Grab a service one at a time and plop them into a hash
-@services = $sms->carrierList();
-
-foreach $row (@services) {
-    print $row->{ID} . " " . $row->{Title} . " " . $row->{SubTitle} . "\n";
+   print "Carrier list not retrieved!\n";
+   print "Error Code: " . $sms->errorCode() . "\n";
+   print "Error Description: " . $sms->errorDesc() . "\n";
+   print "Error Resolution: " . $sms->errorResolution() . "\n";
 }

@@ -1,3 +1,5 @@
+#!/usr/bin/perl -I ../lib
+
 ###################################################################
 #  Copyright (c) 1999-2001 Simplewire, Inc. All Rights Reserved.
 # 
@@ -28,65 +30,39 @@
 # 
 #  Please visit www.simplewire.com for sales and support.
 # 
-#  @author Vidal Borromeo
-#  @version 2.4.0
+#  @author Simplewire, Inc.
+#  @version 2.4.1
 ###################################################################
 
-#!/usr/bin/perl -I ../lib
-
+# Import Module
 use Net::SMS;
 
-# Create New SMS object
-my $r = Net::SMS->new();
+# Create Object
+my $sms = Net::SMS->new();
 
-# Subscriber properties
-$r->subscriberID( '123-456-789-12345' );
-$r->subscriberPassword( 'Password Goes Here' );
+# Subscriber Settings
+$sms->subscriberID("123-456-789-12345");
+$sms->subscriberPassword("Password Goes Here");
 
-# Message properties
-$r->msgPin( "+1 100 510 1234" );
-$r->msgFrom( "Demo" );
-$r->msgCallback( "+1 100 555 1212" );
-$r->msgText( "Hello World from Simplewire!" );
+# Message Settings
+$sms->msgTicketID("L05SN-YNDQN-QSWQX-EG6BC");
 
-# Send Message
-print "Submitting message To Simplewire...\n";
-$r->msgSend();
+print "Checking message status with Simplewire...\n";
+
+# Check Message Status
+$sms->msgStatusSend();
 
 # Check For Errors
-if ($r->success)
+if ($sms->success)
 {
-    print "Message was successfully sent via Simplewire!\n";
+    print "Message status retrieved!\n";
+    print "Status Code: " . $sms->msgStatusCode() . "\n";
+    print "Status Description: " . $sms->msgStatusDesc() . "\n";
 }
 else
 {
-    print "Message was not successfully sent via Simplewire!\n";
-    print "Error Code: " . $r->errorCode . "\n";
-    print "Error Description: " . $r->errorDesc . "\n";
-}
-
-
-
-# And Now Check The Message Status...
-print "\nChecking Status of Message...\n";
-my $ticketID = $r->msgTicketID();
-
-
-# Send the request off
-print "Submitting Status Request To Simplewire...\n";
-$r->msgStatusSend();
-
-
-# Check if the status check was successful
-if ($r->success)
-{
-    print 'The status of message ' . $ticketID . " was retrieved.\n";
-    print 'Status Code: ' . $r->msgStatusCode . "\n";
-    print 'Status Desc: ' . $r->msgStatusDesc . "\n";
-}
-else
-{
-    print 'The status of message #' . $ticketID . " could NOT be retrieved.\n";
-    print 'Error Code: ' . $r->errorCode . "\n";
-    print 'Error Description: ' . $r->errorDesc . "\n";
+    print "Message status not retrieved!\n";
+    print "Error Code: " . $sms->errorCode() . "\n";
+    print "Error Description: " . $sms->errorDesc() . "\n";
+    print "Error Resolution: " . $sms->errorResolution() . "\n";
 }

@@ -1,3 +1,5 @@
+#!/usr/bin/perl -I ../lib
+
 ###################################################################
 #  Copyright (c) 1999-2001 Simplewire, Inc. All Rights Reserved.
 # 
@@ -29,43 +31,47 @@
 # 
 #  Please visit www.simplewire.com for sales and support.
 # 
-#  @author Vidal Borromeo
-#  @version 2.4.0
+#  @author Simplewire, Inc.
+#  @version 2.4.1
 ###################################################################
 
-#!/usr/bin/perl -I ../lib
-
+# Import Module
 use Net::SMS;
 
-# Create New SMS object
-my $r = Net::SMS->new();
+# Create Object
+my $sms = Net::SMS->new();
 
-# Subscriber properties
-$r->subscriberID( '123-456-789-12345' );
-$r->subscriberPassword( 'Password Goes Here' );
+# Subscriber Settings
+$sms->subscriberID("123-456-789-12345");
+$sms->subscriberPassword("Password Goes Here");
 
-# Message properties
-$r->msgPin( "+1 100 510 1234" );
-$r->msgFrom( "Demo" );
-$r->msgCallback( "+1 100 555 1212" );
-$r->msgProfileName( "myProfileName" );
-$r->msgProfileRingtone( "Simplewire:d=4,o=5,b=63:8a,8e,32a,32e,16a,8c6,8a,32c6,32a,16c6,8e6,8c6,32e6,32c6,16e6,8g6,32g,32p,16g,32c6,32g,16c6,8e6,32p" );
-$r->msgProfileScreenSaverFilename( 'example.gif' );
-$r->msgCarrierID( "Carrier ID goes here" );
-$r->optPhone( "nokia" );
+# Message Settings
+$sms->msgPin("+1 100 510 1234");
+$sms->msgFrom("Demo");
+$sms->msgCallback("+1 100 555 1212");
+
+# Smart Message Settings - View the manual for
+# more smart messaging options and acceptance of
+# raw hex data.
+$sms->optPhone("nokia");
+$sms->msgProfileName("myProfileName");
+$sms->msgProfileRingtone("Simplewire:d=4,o=5,b=63:8a,8e,32a,32e,16a,8c6,8a,32c6,32a,16c6,8e6,8c6,32e6,32c6,16e6,8g6,32g,32p,16g,32c6,32g,16c6,8e6,32p");
+$sms->msgProfileScreenSaverFilename("example.gif");
+
+print "Sending message to Simplewire...\n";
 
 # Send Message
-print "Submitting message To Simplewire...\n";
-$r->msgSend();
+$sms->msgSend();
 
 # Check For Errors
-if ($r->success)
+if ($sms->success)
 {
-    print "Message was successfully sent via Simplewire!\n";
+    print "Message was sent!\n";
 }
 else
 {
-    print "Message was not successfully sent via Simplewire!\n";
-    print "Error Code: " . $r->errorCode . "\n";
-    print "Error Description: " . $r->errorDesc . "\n";
+    print "Message was not sent!\n";
+    print "Error Code: " . $sms->errorCode() . "\n";
+    print "Error Description: " . $sms->errorDesc() . "\n";
+    print "Error Resolution: " . $sms->errorResolution() . "\n";
 }

@@ -1,7 +1,7 @@
 ################################################################################
 # Copyright (c) 2001 Simplewire. All rights reserved. 
 #
-# Net::SMS.pm, version 2.40
+# Net::SMS.pm, version 2.41
 #
 # Simplewire, Inc. grants to Licensee, a non-exclusive, non-transferable,
 # royalty-free and limited license to use Licensed Software internally for
@@ -25,7 +25,7 @@ package Net::SMS;
 #---------------------------------------------------------------------
 # Version Info
 #---------------------------------------------------------------------
-$Net::SMS::VERSION = '2.40';
+$Net::SMS::VERSION = '2.41';
 require 5.002;
 
 #---------------------------------------------------------------------
@@ -60,13 +60,13 @@ sub new
 
     bless($self, $class);
 
-	$self->Reset;
+	$self->reset();
 
     return $self;
 }
 
 
-sub Reset
+sub reset
 {
 
 	# pop value
@@ -74,7 +74,6 @@ sub Reset
 
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
-
 
     #-----------------------------------------------------------------
 	# Define default package vars
@@ -90,16 +89,13 @@ sub Reset
 	$self->{	OT_PRODUCTION		}	= 'production';
 	$self->{	OT_DEVELOPMENT		}	= 'development';
 	$self->{	PROXY_TYPE_HTTP		}	= '1';
-#	$self->{	PROXY_TYPE_HTTPS	}	= '2';
-#	$self->{	PROXY_TYPE_SOCKS4	}	= '3';
-#	$self->{	PROXY_TYPE_SOCKS5	}	= '4';
-
 	$self->{	m_CarrierList		}	= [];
 	$self->{	m_ClientStatusCode	}	= -1;
 	$self->{	m_ClientStatusDesc	}	= '';
 	$self->{	m_ConnectionTimeout	}	= 30;
 	$self->{	m_ErrorCode			}	= '';
 	$self->{	m_ErrorDesc			}	= 'No transaction with the Simplewire network has occured.';
+    $self->{    m_ErrorResolution   }   = '';
 	$self->{	m_MsgCallback		}	= undef;
 	$self->{	m_MsgCarrierID		}	= undef;
 	$self->{	m_MsgFrom			}	= undef;
@@ -115,16 +111,16 @@ sub Reset
 	$self->{	m_OptCountryCode	}	= undef;
 	$self->{	m_OptDataCoding		}	= undef;
 	$self->{	m_OptDelimiter		}	= undef;
-	$self->{	m_OptFields			}	= 'all';
+    $self->{	m_OptFields			}	= 'all';
+	$self->{	m_OptFlash			}	= undef;
 	$self->{	m_OptNetworkCode	}	= undef;
 	$self->{	m_OptPhone			}	= undef;
 	$self->{	m_OptTimeout		}	= 30;
 	$self->{	m_OptType			}	= 'production';
+    $self->{    m_ProxyType         }   = 'http';
 	$self->{	m_ProxyPassword		}	= '';
 	$self->{	m_ProxyPort			}	= 80;
-#	$self->{	m_ProxyRealm		}	= '';
 	$self->{	m_ProxyServer		}	= undef;
-#	$self->{	m_ProxyType			}	= PROXY_TYPE_HTTP;
 	$self->{	m_ProxyUsername		}	= '';
 	$self->{	m_RequestProtocol	}	= 'paging';
 	$self->{	m_RequestType		}	= '';
@@ -143,7 +139,7 @@ sub Reset
 	$self->{	m_ServerProtocol	}	= 'http://';
 	$self->{	m_SubscriberID		}	= '';
 	$self->{	m_SubscriberPassword}	= '';
-	$self->{	m_UserAgent			}	= 'Perl/SMS/2.4.0';
+	$self->{	m_UserAgent			}	= 'Perl/SMS/2.4.1';
 	$self->{	m_UserIP			}	= '';
 	$self->{	m_XMLVersion		}	= '1.0';
 
@@ -223,13 +219,28 @@ sub errorDesc
 {
 	# pop value
     my $self = shift();
-	
+
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
     if (@_ == 1) { $self->{m_ErrorDesc} = shift(); }
 
     return $self->{m_ErrorDesc} if defined($self->{m_ErrorDesc}) || return undef;
+
+}
+
+
+sub errorResolution
+{
+	# pop value
+    my $self = shift();
+
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1) { $self->{m_ErrorResolution} = shift(); }
+
+    return $self->{m_ErrorResolution} if defined($self->{m_ErrorResolution}) || return undef;
 
 }
 
@@ -311,7 +322,7 @@ sub msgCLIIconFilename
 {
 	# pop value
     my $self = shift();
-	
+
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
@@ -338,6 +349,25 @@ sub msgCLIIconFilename
 
     return $self->{m_MsgImageFilename} if defined($self->{m_MsgImageFilename}) || return undef;
 
+}
+
+
+sub msgCLIIconHex
+{
+	# pop value
+    my $self = shift();
+
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1)
+	{
+		my $hexResult = shift();
+		$self->{m_MsgImage}	= $hexResult;
+		$self->{m_OptType}	=	'icon';
+	}
+
+    return $self->{m_MsgImage} if defined($self->{m_MsgImage}) || return undef;
 }
 
 
@@ -390,6 +420,25 @@ sub msgOperatorLogoFilename
 }
 
 
+sub msgOperatorLogoHex
+{
+	# pop value
+    my $self = shift();
+
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1)
+	{
+		my $hexResult = shift();
+		$self->{m_MsgImage}	= $hexResult;
+		$self->{m_OptType}	=	'logo';
+	}
+
+    return $self->{m_MsgImage} if defined($self->{m_MsgImage}) || return undef;
+}
+
+
 sub msgPictureFilename
 {
 	# pop value
@@ -421,6 +470,25 @@ sub msgPictureFilename
 
     return $self->{m_MsgImageFilename} if defined($self->{m_MsgImageFilename}) || return undef;
 
+}
+
+
+sub msgPictureHex
+{
+	# pop value
+    my $self = shift();
+
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1)
+	{
+		my $hexResult = shift();
+		$self->{m_MsgImage}	= $hexResult;
+		$self->{m_OptType}	=	'picturemessage';
+	}
+
+    return $self->{m_MsgImage} if defined($self->{m_MsgImage}) || return undef;
 }
 
 
@@ -508,6 +576,25 @@ sub msgProfileScreenSaverFilename
 
     return $self->{m_MsgImageFilename} if defined($self->{m_MsgImageFilename}) || return undef;
 
+}
+
+
+sub msgProfileScreenSaverHex
+{
+	# pop value
+    my $self = shift();
+
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1)
+	{
+		my $hexResult = shift();
+		$self->{m_MsgImage}	= $hexResult;
+		$self->{m_OptType}	=	'profile';
+	}
+
+    return $self->{m_MsgImage} if defined($self->{m_MsgImage}) || return undef;
 }
 
 
@@ -688,6 +775,21 @@ sub optFields
     if (@_ == 1) { $self->{m_OptFields} = shift(); }
 
     return $self->{m_OptFields} if defined($self->{m_OptFields}) || return undef;
+
+}
+
+
+sub optFlash
+{
+	# pop value
+    my $self = shift();
+
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1) { $self->{m_OptFlash} = shift(); }
+
+    return $self->{m_OptFlash} if defined($self->{m_OptFlash}) || return undef;
 
 }
 
@@ -924,17 +1026,29 @@ sub userAgent
 
 }
 
+sub	proxyType
+{
+	# pop value
+    my $self = shift();
+
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1) { $self->{m_ProxyType} = shift(); }
+
+    return $self->{m_ProxyType} if defined($self->{m_ProxyType}) || return undef;
+}
 
 sub	proxyServer
 {
 	# pop value
     my $self = shift();
-	
+
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
     if (@_ == 1) { $self->{m_ProxyServer} = shift(); }
-	
+
     return $self->{m_ProxyServer} if defined($self->{m_ProxyServer}) || return undef;
 }
 
@@ -1045,6 +1159,12 @@ ENDXML
             if (defined($self->optDelimiter))
 			{
                 $xml .= ' delimiter="' . html_encode($self->optDelimiter) . '"';
+            }
+
+            # Set the flash option
+            if (defined($self->optFlash))
+			{
+                $xml .= ' flash="' . html_encode($self->optFlash) . '"';
             }
 
 			# Set the network code option
@@ -1334,6 +1454,16 @@ sub xmlParseEx
 		{
         	$self->errorDesc($error_desc->getValue());
 	    }
+
+        #-----------------------------------------------------------------
+	    # Parse <error> resolution attribute
+	    #-----------------------------------------------------------------
+		my $error_resolution = $error->getAttributeNode("resolution");
+
+	    if (defined($error_resolution))
+		{
+        	$self->errorResolution($error_resolution->getValue());
+	    }
 	}
 
 
@@ -1546,9 +1676,8 @@ sub xmlParseEx
 
 	    if (defined($smartmsg))
 		{
-        	$s->{SmartMsg} = $smartmsg->getValue();
+        	$s->{SmartMsgID} = $smartmsg->getValue();
 	    }
-		
 
 		# New Carrier Recognition Functions
 		my $country_code = $service->getAttributeNode("countrycode");
@@ -1585,6 +1714,7 @@ sub xmlParseEx
 		print "Client Status Desc: $self->{m_ClientStatusDesc}\n";
 		print "ErrorCode == " . $self->errorCode . "\n";
 		print "ErrorDesc == " . $self->errorDesc . "\n\n";
+        print "ErrorResolution == " . $self->errorResolution . "\n\n";
 	}
 
 }
@@ -1751,10 +1881,6 @@ sub raise_error
 	
 	my $errorLookup = 
 	{
-		# Processing Error Codes
-		0		=>	"Success.",
-		1		=>	"Processing request.",
-		2		=>	"Successfully queued.",
 
 		# Client/Internet Error Codes
 		101		=>	"Error while parsing response.  Request was sent off.",
@@ -1805,69 +1931,6 @@ sub raise_error
 		270		=>	"HTTP Service unavailable.",			# 503
 		271		=>	"HTTP Gateway timeout.",				# 504
 		272		=>	"HTTP Version not supported.",			# 505
-
-		# Validation Error Codes
-		301		=>	"Only 1 top-level request element is allowed.",
-		302		=>	"The XML document could not be validated.",
-		303		=>	"The required version attribute of the request element was not found in the request.",
-		304		=>	"The required protocol attribute of the request element was not found in the request.",
-		305		=>	"The required type attribute of the request element was not found in the request.",
-		306		=>	"The XML parameter for rpc.html cannot be empty.",
-		307		=>	"The request was an ill-formed XML document.",
-		310		=>	"If the force option is going to be set, it can only be set to a 1 or 0.",
-		311		=>	"If the method option is going to be set, it can only be set to 'synch' or 'asynch'.",
-		320		=>	"The paging protocol does not know how to handle this type of request.  Please check the type in the request element.",
-		321		=>	"Invalid request version.",
-		322		=>	"Invalid request protocol.",
-		330		=>	"A request of type 'sendpage' requires at least one <page> element to be submitted.",
-		331		=>	"The Simplewire alias was invalid.",
-		332		=>	"The Simplewire alias has not yet been validated.",
-		340		=>	"A serviceid attribute must exist within the <page> element.",
-		341		=>	"The serviceid does not exist.",
-		342		=>	"A serviceid is required and it cannot be an empty attribute.",
-		343		=>	"The service associated with this serviceid has been discontinued.",
-		344		=>	"The service associated with this serviceid is currently in development stages.",
-		350		=>	"A PIN is required.",
-		351		=>	"The PIN is not long enough.",
-		352		=>	"The PIN is too long.",
-		353		=>	"Message text is required.",
-		354		=>	"The total message text is not long enough.",
-		355		=>	"The total message text is too long.",
-		356		=>	"The from field is required.",
-		357		=>	"The from field is not long enough.",
-		358		=>	"The from field is too long.",
-		359		=>	"A callback number is required.",
-		360		=>	"The callback number is not long enough.",
-		361		=>	"The callback number is too long.",
-
-		400		=>	"Service returned a general error while sending the page.",
-		401		=>	"Service returned a general error while sending the page.",
-		410		=>	"Invalid Pager Identification Number (PIN).   The phone number, or PIN, is not a valid subscriber of this service.",
-
-		700		=>	"At least one ticket element must be submitted for a checkstatus request.",
-		701		=>	"The required id attribute of the ticket element was not found in the request.",
-		710		=>	"Incorrectly formatted ticket id.",
-		711		=>	"Ticket id does not exist for any transaction.",
-		712		=>	"A ticket id cannot be an empty string.",
-
-		800		=>	"At least one service element must be submitted for a servicelist request.",
-		801		=>	"General error while retrieving the service list.",
-		802		=>	"The required id attribute of the service element was not found in the request.",
-		803		=>	"A service id cannot be an empty string.  A * will retrieve all the services.",
-
-		1000	=>	"General error while handling request.",
-
-		# Subscriber Error Codes
-		2001	=>	"Invalid subscription authentication.",
-		2002	=>	"The subscription has been de-activated.",
-		2003	=>	"The subscription has been removed.",
-
-		# Network Operator Error Codes
-		3001	=>	"The access or terminal number was not found.",
-		3010	=>	"The message recipient does not subscribe to the Sprint PCS Wireless Web Messaging Service on his or her phone.",
-		3011	=>	"The recipient's phone number is not for a Sprint PCS Phone.",
-		3012	=>	"The callback telephone number contains non-numeric characters.",
-		3020	=>	"The intended recipient has not subscribed to the Web Page Messaging feature.",
 	};
 
 
@@ -1936,8 +1999,7 @@ sub send
 	$http->agent( $self->{m_UserAgent} . ' ' . $http->agent );
 	if( defined( $self->{m_ProxyServer} ) )
 	{
-		$http->proxy('http' ,
-				$self->{m_ServerProtocol} . $self->proxyServer . ':' . $self->proxyPort . '/');
+		$http->proxy('http', $self->{m_ServerProtocol} . $self->proxyServer . ':' . $self->proxyPort . '/');
 	}
 
 	
@@ -1971,8 +2033,8 @@ sub send
 	$request->content_type("application/x-www-form-urlencoded");
 	$request->content($body);
 	$request->header( 'Accept' => 'text/xml' );
-	$request->proxy_authorization_basic(	$self->proxyUsername,
-											$self->proxyPassword );
+	$request->proxy_authorization_basic( $self->proxyUsername,
+										 $self->proxyPassword );
 
 
 	# send off request and get response
@@ -2061,7 +2123,8 @@ __END__;
 
 =head1 NAME
 
-Net::SMS - Sends wireless messages anywhere regardless of carrier.
+Net::SMS - Sends wireless messages to any carrier including text messages and
+SMS (Short Message Service).
 
 =head1 SYNOPSIS
 
@@ -2077,7 +2140,14 @@ for more information.
 
 =head1 INSTALLATION
 
-Place the release file in the root directory. In the root directory, execute
+For very detailed instructions, please refer to the .PDF manual that
+has been included in the /docs directory of the Net-SMS-X.XX.tar.gz
+download.  Once you unzip and untar this file, inside the /docs
+directory will be very detailed installation instructions.
+
+If you are advanced in Perl, then you may just follow the
+instructions below. Place the release file in the root directory. 
+In the root directory, execute
 the following commands, where "X.XX" represents the specific version being used.
 
 [root]# tar -zxvf Net-SMS-X.XX.tar.gz
@@ -2090,44 +2160,46 @@ the following commands, where "X.XX" represents the specific version being used.
 
 [Net-SMS-X.XX]# make install
 
+=head1 EXAMPLES
+
+See the /examples folder that is contained within the Net-SMS-X.XX.tar.gz
+download file.
 
 =head1 QUICK START
 
-
+# Import Module
 use Net::SMS;
 
-# Create New SMS object
-my $r = Net::SMS->new();
+# Create Object
+my $sms = Net::SMS->new();
 
-# Subscriber properties
-$r->subscriberID( '123-456-789-12345' );
-$r->subscriberPassword( 'Password Goes Here' );
+# Subscriber Settings
+$sms->subscriberID("123-456-789-12345");
+$sms->subscriberPassword("Password Goes Here");
 
-# Message properties
-$r->msgPin( "+1 100 510 1234" );
-$r->msgFrom( "Demo" );
-$r->msgCallback( "+1 100 555 1212" );
-$r->msgText( "Hello World from Simplewire!" );
+# Message Settings
+$sms->msgPin("+1 100 510 1234");
+$sms->msgFrom("Demo");
+$sms->msgCallback("+1 100 555 1212");
+$sms->msgText("Hello World From Simplewire!");
+
+print "Sending message to Simplewire...\n";
 
 # Send Message
-print "Submitting message To Simplewire...\n";
-$r->msgSend();
+$sms->msgSend();
 
 # Check For Errors
-if ($r->success)
+if ($sms->success)
 {
-    print "Message was successfully sent via Simplewire!\n";
+    print "Message was sent!\n";
 }
 else
 {
-    print "Message was not successfully sent via Simplewire!\n";
-    print "Error Code: " . $r->errorCode . "\n";
-    print "Error Description: " . $r->errorDesc . "\n";
+    print "Message was not sent!\n";
+    print "Error Code: " . $sms->errorCode() . "\n";
+    print "Error Description: " . $sms->errorDesc() . "\n";
+    print "Error Resolution: " . $sms->errorResolution() . "\n";
 }
-
-=head1 EXAMPLES
-
-See the examples folder.
 
 =head1 UNICODE
 
@@ -2162,7 +2234,7 @@ Note: Both sequences can be used in the same string.
 
 /Net-SMS-X.XX/docs/sw-doc-manual-perl-2.4.0.pdf
 
-www.simplewire.com on the web.
+Visit http://www.simplewire.com/
 
 =head1 AUTHOR
 
@@ -2171,7 +2243,6 @@ www.simplewire.com
 
 =head1 COPYRIGHT
 
-Copyright (c) 2001 Simplewire. All rights reserved. This program is free
-software; you can redistribute it and/or modify it under the same terms
-as Perl itself.
+Please refer to License.txt within the Net-SMS-X.XX.tar.gz file
+for licensing information.
 

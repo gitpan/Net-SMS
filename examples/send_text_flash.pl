@@ -26,7 +26,7 @@
 ###################################################################
 
 ###################################################################
-#  Shows how to send a wireless text message with Unicode in Perl.
+#  Shows how to send a wireless text message in Perl.
 # 
 #  Please visit www.simplewire.com for sales and support.
 # 
@@ -48,10 +48,10 @@ $sms->subscriberPassword("Password Goes Here");
 $sms->msgPin("+1 100 510 1234");
 $sms->msgFrom("Demo");
 $sms->msgCallback("+1 100 555 1212");
-$sms->msgText("Hello World from Simplewire - \\XC9A4!");
+$sms->msgText("Hello World From Simplewire!");
 
-# Data Coding Settings
-$sms->optDataCoding("ucs2");
+# Optional Message Setttings
+$sms->optFlash("true");
 
 print "Sending message to Simplewire...\n";
 
