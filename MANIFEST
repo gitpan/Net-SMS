@@ -3,6 +3,3 @@ MANIFEST
 Makefile.PL
 README
 lib/Net/SMS.pm
-lib/Net/SMS/Common.pm
-lib/Net/SMS/Request.pm
-lib/Net/SMS/Response.pm

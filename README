@@ -1,22 +1,19 @@
 
-                        Net::SMS, version 1.00
+                        Net::SMS, version 2.00
 
-Copyright (c) 2000 SimpleWire. All rights reserved. This program is free
+Copyright (c) 2001 SimpleWire. All rights reserved. This program is free
 software; you can redistribute it and/or modify it under the same terms
 as Perl itself.
 
-Written By: Joe Lauer <joelauer@simplewire.com>
-
 For further documentation and support, please check out
 www.simplewire.com
-
 
   Description
   -----------
 
     Net::SMS is a global short text messaging service interface via the
     Internet.  It brings you the first and only way to send SMS messages
-    through one easy interface.  SimpleWire has defined an XML SMS standard
+    through one easy interface.  Simplewire has defined an XML SMS standard
     and will make numerous tools available for developer's use so that SMS
     technology can be better utilized.  Currently, this interface supports
     more than just SMS enabled devices and can send messages to ANY
@@ -26,15 +23,13 @@ www.simplewire.com
     guarantees the same interface no matter what changes happen in the
     wireless market.
 
-    Net::SMS is the perl interface to SimpleWire's expanding messaging
-    network.  The module interacts with SimleWire's Remote Procedure Calls.
+    Net::SMS is the perl interface to Simplewire's expanding messaging
+    network.  The module interacts with Simlewire's Remote Procedure Calls.
     The Remote Procedure Calls provide an XML API and the protocol is open to
     all developers.  For futher support or questions, you should visit
     SimpleWire's website at www.simplewire.com.  There you will find
     support and documentation including the white paper explaining the
-    SimpleWire XML API.
-
-
+    Simplewire XML API.
 
   Dependencies
   ------------
@@ -44,10 +39,8 @@ www.simplewire.com
 
       * LWP::UserAgent >= 5.47
       * XML::DOM (libxml-enno) >= 1.02
-      * Net::Pager >= 2.00
 
-
-  Features in 1.00
+  Features in 2.00
   ----------------
 
     .  Send messages to ANY wireless device
@@ -57,7 +50,7 @@ www.simplewire.com
     .  Removes the difficult part of interfacing to many different
        wireless providers and carriers.
 
-    .  The SimpleWire network will maintain every service so that you
+    .  The Simplewire network will maintain every service so that you
        don't have to.
 
 
@@ -79,7 +72,6 @@ www.simplewire.com
     .  A Windows 95/NT machine requires Perl version 5.003_07 or later
 
 
-
   Documentation
   -------------
 
@@ -89,7 +81,6 @@ www.simplewire.com
     the directory "man/man3".  However, the best documentation is
     the example code in the /eg directory form the tar.gz file or
     on www.simplewire.com.
-
 
   Installation
   ------------
@@ -117,13 +108,13 @@ www.simplewire.com
             make test
             make pure_install
 
-    c.  Alternatively, you can just copy or move Pager.pm
+    c.  Alternatively, you can just copy or move SMS.pm
         from the distribution into a directory named Net/ in the Perl
         library.  You can then manually build the documentation using
         pod2man or pod2html.
 
     d.  At the time of printing this, there should be more ways to install
-        Net::Pager.  Please go to www.simplewire.com and visit our
+        Net::SMS.  Please go to www.simplewire.com and visit our
         Developers section for the easiest ways.  There should be a CPAN
         install and a ppm install.
 
@@ -133,12 +124,7 @@ www.simplewire.com
 	Windows does not come with the make program.  Instead, you will have to
 	use a similar program called 'nmake'.  If you have happened to install
     Microsoft's Visual Studio then 'nmake' is already installed on your
-    computer and you can fun the following instructions.  If you don't have
-    'nmake' then please visit
-		
-		http://www.simplewire.com/clienttools/perl.epl
-
-    for instructions on how to get 'nmake'.
+    computer and you can fun the following instructions.
 
     Once you have 'nmake.exe' then you can replicate the instructions laid
     out in the previous a, b, and c subpoint above except replace the 'make'
@@ -158,15 +144,10 @@ www.simplewire.com
     follow choice c. above and just make a directory called Net where your
     programs will run and then copy Pager.pm into it.
 
-    If you have any other questions please visit SimpleWire's FAQ or online
-	support forum for anwers.
+    If you have any other questions please visit Simplewire's FAQ or online
+    support forum for anwers.
 
 ----------------------------------------------------------------------
-SimpleWire
-743 Beaubien
-Suite 300
-Detroit, MI 48226
-313.961.4407
 
-Released: 10/04/2000
+Released: 3/24/2000
 Coded By: Joe Lauer <joelauer@simplewire.com>
