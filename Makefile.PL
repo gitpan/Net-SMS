@@ -1,10 +1,24 @@
 use ExtUtils::MakeMaker;
 
+if ($^O eq 'MSWin32')
+{
+  $smspath = 'lib\\Net\\SMS.pm';
+}
+else
+{
+  $smspath = 'lib/Net/SMS.pm';  
+}
+
+
 WriteMakefile(
     NAME	=> 'Net::SMS',
     DISTNAME => 'Net-SMS',
-    VERSION_FROM => 'lib/Net/SMS.pm',
-    PREREQ_PM => { 'XML::DOM' => '0' },
+    VERSION_FROM => $smspath,
+    PREREQ_PM => {'XML::DOM'		=> "1.25",
+			'Unicode::String'	=> "2.06",
+			'LWP::UserAgent'	=> 0,
+			'HTTP::Request'	=> 0,
+			'HTTP::Response'	=> 0},
     dist        => {'COMPRESS'  => 'gzip', 'SUFFIX'    => '.gz'},
 	($] ge '5.005') ? (
         'AUTHOR' => 'Simplewire (support@simplewire.com)',

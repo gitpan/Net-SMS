@@ -1,0 +1,75 @@
+
+Simplewire, Inc.
+Perl SMS SDK 
+Release Notes
+
+Please report any bugs to http://www.simplewire.com/support
+__________________________________________________________________
+
+2.4.0 - (2001-9-21)
+
+	* Added smart messaging.
+	  - msgCLIIconFilename()
+	  - msgOperatorLogoFilename()
+	  - msgPictureFilename()
+	  - msgProfileName()
+	  - msgProfileRingtone()
+	  - msgProfileScreenSaverFilename()
+	  - msgRingtone()
+
+	* Added optPhone() for users to specify destination phone
+	  type for use with smart messaging.
+
+	* Added optCountryCode() and optNetworkCode() for use
+	  with operator logos.
+
+	* Added smart message attribute to carrier list info.
+
+	* Stripped out module dependencies from installation.
+	  Users must now install dependencies themselves.
+
+	* Modified to be more platform independent.
+
+2.3.3 - August 21, 2001
+
+	* Removed 'pwd' commands from makefile for compatibility
+	  with Windows installation.
+
+2.3.2 - August 13, 2001
+
+	* Renamed "UserName" to "Username" with lowercase 'n'.
+
+	* Various fixes and modifications.
+
+2.3.1 - July 31, 2001
+
+	* Renamed 'timeout' method to 'connectionTimeout'
+
+	* Changed default ServerName from 'rpc' to 'wmp-test'.
+
+	* Changed default OptDelimiter from ":" to undefined
+
+	* DataCoding XML bug fixed
+
+2.3.0 - July 19, 2001 - (Developed as version 2.2.2)
+
+	* Unicode support added
+
+	* Custom Simplewire Unicode escape sequence added. \\X####
+
+	* MsgText and MsgFrom attributes are now sent as Unicode
+
+	* Deprecated synchronous
+
+	* Updated old error codes to new error codes
+
+	* Modified README
+
+	* Updated man page
+
+	* Added optDataCoding method
+
+	* Added subscriber password support
+
+	* Revised examples
+
