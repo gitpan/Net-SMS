@@ -31,7 +31,7 @@
 #  Please visit www.simplewire.com for sales and support.
 # 
 #  @author Simplewire, Inc.
-#  @version 2.4.1
+#  @version 2.6.3
 ###################################################################
 
 # Import Module
@@ -44,6 +44,9 @@ my $sms = Net::SMS->new();
 $sms->subscriberID("123-456-789-12345");
 $sms->subscriberPassword("Password Goes Here");
 
+# Optional Debug
+#$sms->debug(1);
+
 print "Retrieving carrier list from Simplewire...\n";
 
 # Retrieve Carrier List
@@ -54,10 +57,10 @@ if ($sms->success())
 {
     print "Carrier list retrieved!\n";
 
-	@services = $sms->carrierList();
+	@networks = $sms->carrierList();
 
-	foreach $row (@services) {
-	    print $row->{ID} . ": " . $row->{Title} . "\n";
+	foreach $operator (@networks) {
+	    print "(" . $operator->{CountryCode} . ") " . $operator->{Title} . " - " . $operator->{ID} . "\n";
 	}
 }
 else

@@ -1,6 +1,6 @@
 
 Simplewire, Inc.
-Perl SMS Software Development Kit 2.6.1
+Perl SMS Software Development Kit 2.6.4
 
 Contents
 ----------------------------------------------------------------
@@ -17,7 +17,22 @@ Contents
 Release Notes
 ----------------------------------------------------------------
 
-2.6.1 - January 25, 2003
+2.6.4 - April 30, 2004
+
+    * Fixed backwards compatability bug with version <= 3.9.7
+      of the WMP Server.
+
+2.6.3 - April 5, 2004
+
+    * Fixed Carrier/Network List bug
+
+2.6.2 - February 12, 2004
+
+    * Fixed Unicode text message bug -- some platforms failed
+      to properly convert characters resulting in submission
+      errors.
+
+2.6.1 - January 25, 2004
 
     * Fixed minor XML formatting bug.
     

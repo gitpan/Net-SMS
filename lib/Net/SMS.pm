@@ -1,7 +1,7 @@
 ################################################################################
-# Copyright (c) 2001 Simplewire. All rights reserved. 
+# Copyright (c) 2001-2004 Simplewire. All rights reserved. 
 #
-# Net::SMS.pm, version 2.61
+# Net::SMS.pm, version 2.63
 # 
 #
 # Simplewire, Inc. grants to Licensee, a non-exclusive, non-transferable,
@@ -62,7 +62,7 @@ Exporter::export_ok_tags('encoding', 'proxy');
 ###################################################################### 
 
 # ONLY NEED TO CHANGE VERSION NUMBER HERE....
-$VERSION = '2.61';
+$VERSION = '2.64';
 
 # for constant values <=> string values
 our (@CONTENT_TYPE, @ENC, @PROXY_TYPE);
@@ -216,7 +216,7 @@ sub reset {
 	$self->{m_Udh}					= undef;
 	$self->{m_OptUdhi}				= 0;
 		
-	$self->{m_Protocol}				= 'wmp';
+	$self->{m_Protocol}				= 'paging';
 	$self->{m_Type}					= undef;
 	$self->{m_Version}				= '2.0';
 	
@@ -1645,11 +1645,20 @@ sub toXML {
     # Common heading for all requests
     #-----------------------------------------------------------------
 
+	my $t = $self->{m_Type};
+	if ($t eq "submit") {
+		$t = "sendpage";
+	} elsif ($t eq "query") {
+		$t = "checkstatus";
+	} elsif ($t eq "list") {
+		$t = "carrierlist";
+	}
+
     my $xml =<<ENDXML;
 <?xml version="1.0" ?>
-<request version="$self->{m_Version}" protocol="$self->{m_Protocol}" type="$self->{m_Type}">
+<request version="$self->{m_Version}" protocol="$self->{m_Protocol}" type="$t">
     <user agent="$self->{m_UserAgent}"/>
-    <account id="$self->{m_AccountId}" password="$self->{m_AccountPassword}"/>
+    <subscriber id="$self->{m_AccountId}" password="$self->{m_AccountPassword}"/>
 ENDXML
 
     #-----------------------------------------------------------------
@@ -1666,7 +1675,7 @@ ENDXML
 		}
 
 		if (defined($self->optEncoding)) {
-			$xml .= ' encoding="' . $self->optEncoding . '"';
+			$xml .= ' datacoding="' . $self->optEncoding . '"';
 		}
 
 		if (defined($self->optFlash)) {
@@ -1884,6 +1893,9 @@ sub parse {
     											Start => sub { $self->_handle_start(@_) },
 	                                          	End   => sub { $self->_handle_end(@_) } } );
     
+	# reset the carrier list
+	$self->{m_CarrierList} = [];
+
     # begin parsing xml
 	$parser->parse($xml);
 }
@@ -1893,9 +1905,6 @@ sub _handle_start {
 	my $expat = shift();
 	my $element = shift();
     my @attrs = @_;
-	
-	#print "inside start -> " . $self . "\n";
-	#print "element -> " . $element . "\n";
 	
 	# select which function to use for parsing
 	if ($element eq "request") {
@@ -1922,6 +1931,8 @@ sub _handle_start {
 		$self->_parse_message(@attrs);
 	} elsif ($element eq "page") {
 		$self->_parse_page(@attrs);
+	} elsif ($element eq "service") {
+		$self->_parse_service(@attrs);
 	} else {
 		# unknown element type
 	}
@@ -2127,7 +2138,6 @@ sub _parse_page {
 	}
 }
 
-
 sub _parse_message {
 	# get the values
 	my $self = shift();
@@ -2154,6 +2164,66 @@ sub _parse_message {
 	}
 }
 
+sub _parse_service {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# new hash for the list entry
+	my $s = {};
+
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'id') {
+        	$s->{ID} = $value;
+	    } elsif ($name eq 'title') {
+        	$s->{Title} = $value;
+	    } elsif ($name eq 'subtitle') {
+        	$s->{SubTitle} = $value;
+	    } elsif ($name eq 'contenttype') {
+        	$s->{ContentType} = $value;
+	    } elsif ($name eq 'pinrequired') {
+        	$s->{PinRequired} = $value;
+	    } elsif ($name eq 'pinminlength') {
+        	$s->{PinMinLength} = $value;
+	    } elsif ($name eq 'pinmaxlength') {
+        	$s->{PinMaxLength} = $value;
+	    } elsif ($name eq 'textrequired') {
+        	$s->{TextRequired} = $value;
+	    } elsif ($name eq 'textminlength') {
+        	$s->{TextMinLength} = $value;
+	    } elsif ($name eq 'textmaxlength') {
+        	$s->{TextMaxLength} = $value;
+	    } elsif ($name eq 'fromrequired') {
+        	$s->{FromRequired} = $value;
+	    } elsif ($name eq 'fromminlength') {
+        	$s->{FromMinLength} = $value;
+	    } elsif ($name eq 'frommaxlength') {
+        	$s->{FromMaxLength} = $value;
+	    } elsif ($name eq 'callbackrequired') {
+        	$s->{CallbackRequired} = $value;
+	    } elsif ($name eq 'callbacksupported') {
+        	$s->{CallbackSupported} = $value;
+	    } elsif ($name eq 'callbackminlength') {
+        	$s->{CallbackMinLength} = $value;
+	    } elsif ($name eq 'callbackmaxlength') {
+        	$s->{CallbackMaxLength} = $value;
+	    } elsif ($name eq 'type') {
+        	$s->{Type} = $value;
+	    } elsif ($name eq 'smartmsg') {
+        	$s->{SmartMsgID} = $value;
+	    } elsif ($name eq 'countrycode') {
+        	$s->{CountryCode} = $value;
+	    } elsif ($name eq 'countryname') {
+        	$s->{CountryName} = $value;
+	    }
+	}
+	
+	# add entry onto carrier list
+	push @{ $self->{m_CarrierList} }, $s;
+}
 
 ######################################################################
 #
@@ -2452,6 +2522,10 @@ sub send {
 		$full_file = 'https://' . $server_name . $self->{m_RemoteFile};
 	} else {
 		$full_file = 'http://' . $server_name . $self->{m_RemoteFile};
+	}
+	
+	if ($self->debug) {
+		print "Connecting to: $full_file\n";
 	}
 
 	##########################################################
