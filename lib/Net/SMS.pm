@@ -1,7 +1,7 @@
 ################################################################################
 # Copyright (c) 2001 Simplewire. All rights reserved. 
 #
-# Net::SMS.pm, version 2.51 (EMS Enabled)
+# Net::SMS.pm, version 2.61
 # 
 #
 # Simplewire, Inc. grants to Licensee, a non-exclusive, non-transferable,
@@ -22,11 +22,6 @@
 #---------------------------------------------------------------------
 
 package Net::SMS;
-
-#---------------------------------------------------------------------
-# Version Info
-#---------------------------------------------------------------------
-$Net::SMS::VERSION = '2.51';
 require 5.002;
 
 #---------------------------------------------------------------------
@@ -34,41 +29,140 @@ require 5.002;
 #---------------------------------------------------------------------
 use strict;
 use Unicode::String qw(utf8 latin1 utf16);
-use XML::DOM;
+use Exporter;
+use XML::Parser;
 use LWP::UserAgent;
 use HTTP::Request;
 use HTTP::Response;
+
+# for exporting
+our(@ISA, @EXPORT, @EXPORT_OK, %EXPORT_TAGS, $VERSION);
+
+@ISA = qw(Exporter);
+
+# symbols to export by default
+@EXPORT = qw();			
+
+# symbols to export on request
+@EXPORT_OK = qw();
+
+# tagged sets of symbols
+%EXPORT_TAGS = (content => [qw(CONTENT_TYPE_TEXT CONTENT_TYPE_RINGTONE CONTENT_TYPE_ICON CONTENT_TYPE_LOGO CONTENT_TYPE_PICTURE CONTENT_TYPE_PROFILE CONTENT_TYPE_SETTING CONTENT_TYPE_EMS CONTENT_TYPE_WAPPUSH)], 
+				encoding => [qw(ENC_7BIT ENC_8BIT ENC_UCS2)],
+				proxy => [qw(PROXY_TYPE_NONE PROXY_TYPE_HTTP)] );
+
+# add to @EXPORT
+Exporter::export_tags('content');
+
+# add to @EXPORT_OK
+Exporter::export_ok_tags('encoding', 'proxy');
+
+######################################################################
+# Constants
+###################################################################### 
+
+# ONLY NEED TO CHANGE VERSION NUMBER HERE....
+$VERSION = '2.61';
+
+# for constant values <=> string values
+our (@CONTENT_TYPE, @ENC, @PROXY_TYPE);
+
+sub CONTENT_TYPE_TEXT 		() { "text" }
+sub CONTENT_TYPE_DATA 		() { "data" }
+sub CONTENT_TYPE_RINGTONE 	() { "ringtone" }
+sub CONTENT_TYPE_ICON 		() { "icon" }
+sub CONTENT_TYPE_LOGO 		() { "logo" }
+sub CONTENT_TYPE_PICTURE 	() { "picture" }
+sub CONTENT_TYPE_PROFILE 	() { "profile" }
+sub CONTENT_TYPE_SETTING 	() { "setting" }
+sub CONTENT_TYPE_EMS 		() { "ems" }
+sub CONTENT_TYPE_WAP_PUSH 	() { "wap_push" }
+
+# content type constants
+@CONTENT_TYPE = (undef, "text", "data", "ringtone", "icon", "logo", "picture", "profile", "setting", "ems", "wap_push");
+
+sub ENC_7BIT () { "7bit" }
+sub ENC_8BIT () { "8bit" }
+sub ENC_UCS2 () { "ucs2" }
+
+# encoding constants
+@ENC = (undef, "7bit", "8bit", "ucs2");
+
+sub PROXY_TYPE_NONE () { "none" }
+sub PROXY_TYPE_HTTP () { "http" }
+
+# proxy constants
+@PROXY_TYPE = (undef, "none", "http");
 
 ######################################################################
 # Net::SMS->new();
 #
 ######################################################################
 
-sub new
-{
+# validates an option is in an array
+# arg1 is the variable to look for
+# arg2 is a reference to an array to search
+# returns 1 if found, 0 if not found
+sub _validate_constant {
+	# first argument is constant
+	my $var = shift();
+	# second argument is reference to array
+	my @opts = @{ shift() };
 
+	my $success = 0;
+	foreach my $opt (@opts) {
+		# return true
+		return 1 if ($var eq $opt);
+	}
+	
+	# return false
+	return 0;
+}
+
+# validates a boolean value
+sub _validate_bool {
+	# first argument is variable
+	my $var = shift();
+	# test the truth value, defaulting to false
+	if ($var eq "true" || $var eq 1) {
+		return 1;
+	}
+	return 0;
+}
+
+# tests whether SSL is available
+sub _is_ssl_avail {
+	my $http = LWP::UserAgent->new();
+	return $http->is_protocol_supported('https');
+}
+
+# prints out xml value of a bool
+sub _return_bool {
+	my $var = shift();
+	if ($var) {
+		return "true";
+	}
+	return "false";
+}
+
+sub new {
     my $that  = shift;
     my $class = ref($that) || $that;
     local $_;
     my %args;
-
 	#-----------------------------------------------------------------
 	# Define default package vars
 	#-----------------------------------------------------------------
-
 	# Placeholder
-	my $self = {	NOTHING		=> 'nothing'	};
+	my $self = {NOTHING		=> 'nothing'};
 
     bless($self, $class);
-
 	$self->reset();
-
     return $self;
 }
 
 
-sub reset
-{
+sub reset {
 
 	# pop value
     my $self = shift();
@@ -79,79 +173,130 @@ sub reset
     #-----------------------------------------------------------------
 	# Define default package vars
     #-----------------------------------------------------------------
-	$self->{	DEBUG				}	= 0;
+	$self->{DEBUG}					= 0;
+	
+	$self->{m_SoftwareVendor}		= "Simplewire, Inc.";
+	$self->{m_SoftwareWebsite}		= "www.simplewire.com";
+	$self->{m_SoftwareTitle}		= "Perl SMS Software Development Kit";
+	$self->{m_SoftwareVersion}		= substr($VERSION, 0, length($VERSION)-1) . "." . chop($VERSION);
+	
+	$self->{m_CarrierList}			= [];
+	
+	$self->{m_ClientStatusCode}		= -1;
+	$self->{m_ClientStatusDesc}		= '';
+	
+	$self->{m_ErrorCode}			= 0;
+	$self->{m_ErrorDescription}		= undef;
+    $self->{m_ErrorResolution}		= undef;
+    
+    $self->{m_StatusCode}			= undef;
+	$self->{m_StatusDescription}	= undef;
+	
+	$self->{m_NetworkId}			= undef;
+	$self->{m_DestAddr}				= undef;
+	$self->{m_SourceAddr}			= undef;
 
-	# constants
-	$self->{	RT_SENDPAGE			}	= 'sendpage';
-	$self->{	RT_CHECKSTATUS		}	= 'checkstatus';
-	$self->{	RT_CARRIERLIST		}	= 'servicelist';
-	$self->{	OF_SELECTBOX		}	= 'selectbox';
-	$self->{	OF_ALL				}	= 'all';
-	$self->{	OT_PRODUCTION		}	= 'production';
-	$self->{	OT_DEVELOPMENT		}	= 'development';
-	$self->{	PROXY_TYPE_HTTP		}	= '1';
-	$self->{	m_CarrierList		}	= [];
-	$self->{	m_ClientStatusCode	}	= -1;
-	$self->{	m_ClientStatusDesc	}	= '';
-	$self->{	m_ConnectionTimeout	}	= 30;
-	$self->{	m_ErrorCode			}	= '';
-	$self->{	m_ErrorDesc			}	= 'No transaction with the Simplewire network has occured.';
-    $self->{    m_ErrorResolution   }   = '';
-	$self->{	m_MsgCallback		}	= undef;
-	$self->{	m_MsgCarrierID		}	= undef;
-	$self->{	m_MsgFrom			}	= undef;
-	$self->{	m_MsgImage			}	= undef;
-	$self->{	m_MsgImageFilename	}	= undef;
-	$self->{	m_MsgPin			}	= undef;
-	$self->{	m_MsgRingtone		}	= undef;
-	$self->{	m_MsgStatusCode		}	= undef;
-	$self->{	m_MsgStatusDesc		}	= undef;
-	$self->{	m_MsgText			}	= undef;
-	$self->{	m_MsgTicketID		}	= undef;
-	$self->{	m_MsgUnicodeText	}	= undef;
-	$self->{	m_OptCountryCode	}	= undef;
-	$self->{	m_OptDataCoding		}	= undef;
-	$self->{	m_OptDelimiter		}	= undef;
-    $self->{	m_OptFields			}	= 'all';
-	$self->{	m_OptFlash			}	= undef;
-	$self->{	m_OptNetworkCode	}	= undef;
-	$self->{	m_OptPhone			}	= undef;
-	$self->{	m_OptTimeout		}	= 30;
-	$self->{	m_OptType			}	= 'production';
-    $self->{    m_ProxyType         }   = 'http';
-	$self->{	m_ProxyPassword		}	= '';
-	$self->{	m_ProxyPort			}	= 80;
-	$self->{	m_ProxyServer		}	= undef;
-	$self->{	m_ProxyUsername		}	= '';
-	$self->{	m_RequestProtocol	}	= 'paging';
-	$self->{	m_RequestType		}	= '';
-	$self->{	m_RequestVersion	}	= '2.0';
-	$self->{	m_RequestXML		}	= '';
-	$self->{	m_ResponseProtocol	}	= 'paging';
-	$self->{	m_ResponseType		}	= '';
-	$self->{	m_ResponseVersion	}	= '2.0';
-	$self->{	m_ResponseXML		}	= undef;
-	$self->{	m_ServerBeginResponse}	= '<?xml version="1.0" ?>';
-	$self->{	m_ServerDomain		}	= 'simplewire.com';
-	$self->{	m_ServerEndResponse	}	= '</response>';
-	$self->{	m_ServerName		}	= 'wmp-test';
-	$self->{	m_ServerFile		}	= '/paging/rpc.xml';
-	$self->{	m_ServerPort		}	= 80;
-	$self->{	m_ServerProtocol	}	= 'http://';
-	$self->{	m_SubscriberID		}	= '';
-	$self->{	m_SubscriberPassword}	= '';
-	$self->{	m_UserAgent			}	= 'Perl/SMS/2.5.0';
-	$self->{	m_UserIP			}	= '';
-	$self->{	m_XMLVersion		}	= '1.0';
-	# Added for EMS
-	$self->{    m_OptContentType    }   = '';
-    $self->{    m_EmsElements       }   = [];
+	$self->{m_TicketId}				= undef;
+	$self->{m_TicketFee}			= undef;
+
+	$self->{m_MsgFrom}				= undef;
+	$self->{m_MsgImage}				= undef;
+	$self->{m_MsgImageFilename}		= undef;
+	$self->{m_MsgRingtone}			= undef;
+	$self->{m_MsgData}				= undef;
+	
+	$self->{m_OptCountryCode}		= undef;
+	$self->{m_OptEncoding}			= undef;
+	$self->{m_OptFlash}				= undef;
+	$self->{m_OptNetworkCode}		= undef;
+	$self->{m_OptPhone}				= undef;
+	$self->{m_OptType}				= undef;
+	$self->{m_OptUrl}				= undef;
+	
+	$self->{m_Udh}					= undef;
+	$self->{m_OptUdhi}				= 0;
+		
+	$self->{m_Protocol}				= 'wmp';
+	$self->{m_Type}					= undef;
+	$self->{m_Version}				= '2.0';
+	
+	$self->{m_RequestXML}			= undef;
+	$self->{m_ResponseXML}			= undef;
+	
+	$self->{m_ProxyType}			= undef;
+	$self->{m_ProxyPassword}		= undef;
+	$self->{m_ProxyPort}			= 0;
+	$self->{m_ProxyHost}			= undef;
+	$self->{m_ProxyUsername}		= undef;
+	
+	$self->{m_Secure}				= 0;
+	$self->{m_ConnectionTimeout}	= 30;
+	$self->{m_RemoteFile}			= '/wmp';
+	$self->{m_RemoteHost}			= 'wmp.simplewire.com';
+	$self->{m_RemotePort}			= 0;
+	
+	$self->{m_AccountId}			= undef;
+	$self->{m_AccountPassword}		= undef;
+	$self->{m_AccountBalance}		= undef;
+	
+	$self->{m_UserAgent}			= 'Perl/SMS/' . $self->{m_SoftwareVersion};
+	
+	# added for EMS
+	$self->{m_OptContentType}		= '';
+    $self->{m_EmsElements}			= [];
 	
 }
 
 
-sub carrierList
-{
+sub account {
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    $self->send('account');
+    # return success/failure
+    return $self->success();
+}
+
+
+sub accountBalance {
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1) { $self->{m_AccountBalance} = shift(); }
+
+    return $self->{m_AccountBalance} if defined($self->{m_AccountBalance}) || return undef;
+}
+
+
+# new in 2.60
+sub secure {
+	# pop value
+	my $self = shift();
+		
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+	if (@_ == 1) {
+		$self->{m_Secure} = _validate_bool(shift());
+		# check whether this was set to true
+		if ($self->{m_Secure} && !_is_ssl_avail()) {
+			die "SSL is not available for secure messaging";
+		}
+		
+	}
+	
+    return $self->{m_Secure} if defined($self->{m_Secure}) || return undef;
+}
+
+
+
+sub carrierList {
 	# pop value
     my $self = shift();
 	
@@ -162,20 +307,25 @@ sub carrierList
 }
 
 
-sub carrierListSend
-{
+sub list {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    return $self->send('servicelist');
+    $self->send('list');
+    # return success/failure
+    return $self->success();
+}
+
+# DEPRECATED TO list()
+sub carrierListSend {
+	list(@_);
 }
 
 
-sub connectionTimeout
-{
+sub connectionTimeout {
 	# pop value
     my $self = shift();
 	
@@ -185,12 +335,10 @@ sub connectionTimeout
     if (@_ == 1) { $self->{m_ConnectionTimeout} = shift(); }
 
     return $self->{m_ConnectionTimeout} if defined($self->{m_ConnectionTimeout}) || return undef;
-
 }
 
 
-sub debugMode
-{
+sub debug {
 	# pop value
     my $self = shift();
 	
@@ -203,9 +351,13 @@ sub debugMode
 
 }
 
+# DEPRECATED TO debug()
+sub debugMode {
+	debug(@_);
+}
 
-sub errorCode
-{
+
+sub errorCode {
 	# pop value
     my $self = shift();
 	
@@ -215,27 +367,28 @@ sub errorCode
     if (@_ == 1) { $self->{m_ErrorCode} = shift(); }
 
     return $self->{m_ErrorCode} if defined($self->{m_ErrorCode}) || return undef;
-
 }
 
-
-sub errorDesc
-{
+sub errorDescription {
 	# pop value
     my $self = shift();
 
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_ErrorDesc} = shift(); }
+    if (@_ == 1) { $self->{m_ErrorDescription} = shift(); }
 
-    return $self->{m_ErrorDesc} if defined($self->{m_ErrorDesc}) || return undef;
-
+    return $self->{m_ErrorDescription} if defined($self->{m_ErrorDescription}) || return undef;
 }
 
 
-sub errorResolution
-{
+# DEPRECATED TO errorDescription
+sub errorDesc {
+	errorDescription(@_);
+}
+
+
+sub errorResolution {
 	# pop value
     my $self = shift();
 
@@ -245,54 +398,95 @@ sub errorResolution
     if (@_ == 1) { $self->{m_ErrorResolution} = shift(); }
 
     return $self->{m_ErrorResolution} if defined($self->{m_ErrorResolution}) || return undef;
-
 }
 
 
-sub isCarrierlist
-{
+sub isAccount {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    return 1 if ($self->{m_RequestType} eq "servicelist");
+    return 1 if ($self->{m_Type} eq "account");
     return 0;
-
 }
 
 
-sub isMsg
-{
+sub isList {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    return 1 if ($self->{m_RequestType} eq "sendpage");
+    return 1 if ($self->{m_Type} eq "list");
     return 0;
-
 }
 
 
-sub isMsgStatus
-{
+# DEPRECATED TO isList()
+sub isCarrierlist {
+	isList(@_);
+}
+
+
+sub isSubmit {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    return 1 if ($self->{m_RequestType} eq "checkstatus");
+    return 1 if ($self->{m_Type} eq "submit");
     return 0;
+}
 
+# DEPRECATED TO isSubmit()
+sub isMsg {
+	isSubmit(@_);
+}
+
+sub isNotify {
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    return 1 if ($self->{m_Type} eq "notify");
+    return 0;
+}
+
+sub isDeliver {
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    return 1 if ($self->{m_Type} eq "deliver" || $self->{m_Type} eq "sendpage");
+    return 0;
+}
+
+sub isQuery {
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    return 1 if ($self->{m_Type} eq "query");
+    return 0;
+}
+
+# DEPRECATED TO isQuery()
+sub isMsgStatus {
+	isQuery(@_);
 }
 
 
-sub msgCallback
-{
+sub sourceAddr {
 	# pop value
     my $self = shift();
 	
@@ -300,64 +494,67 @@ sub msgCallback
     die "You must instantiate an object to use this function" if !(ref($self));
 
 	# if parameter list has length == 1, then pop value and set call back.
-    if (@_ == 1) { $self->{m_MsgCallback} = shift(); }
+    if (@_ == 1) { $self->{m_SourceAddr} = shift(); }
 
-    return $self->{m_MsgCallback} if defined($self->{m_MsgCallback}) || return undef;
+    return $self->{m_SourceAddr} if defined($self->{m_SourceAddr}) || return undef;
+}
 
+# DEPRECATED TO sourceAddr
+sub msgCallback {
+	sourceAddr(@_);
 }
 
 
-sub msgCarrierID
-{
+sub networkId {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_MsgCarrierID} = shift(); }
+    if (@_ == 1) { $self->{NetworkId} = shift(); }
 
-    return $self->{m_MsgCarrierID} if defined($self->{m_MsgCarrierID}) || return undef;
+    return $self->{NetworkId} if defined($self->{NetworkId}) || return undef;
+}
 
+# DEPRECATED TO networkId
+sub msgCarrierID {
+	networkId(@_);
 }
 
 
-sub msgCLIIconFilename
-{
+sub msgCLIIconFilename {
 	# pop value
     my $self = shift();
 
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1)
-	{
+    if (@_ == 1) {
 		my $file_path = shift();
 		my $hexResult = '';
 		my $buf;
+		my $fh;
 
-		open(fh, "< $file_path") || die "Can't open file \"$file_path\"";
-		binmode fh;
+		open($fh, "< $file_path") || die "Can't open file \"$file_path\"";
+		binmode $fh;
 
-		while(read fh, $buf, 1)
-		{
+		while(read $fh, $buf, 1) {
 			$hexResult .= sprintf( "%2.2lX",  ord($buf) );
 		}
 
-		close(fh);
+		close($fh);
 
 		$self->{m_MsgImageFilename} = $file_path;
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'icon';
+		$self->optContentType('icon');
+		#$self->{m_OptType}	=	'icon';
 	}
-
     return $self->{m_MsgImageFilename} if defined($self->{m_MsgImageFilename}) || return undef;
-
 }
 
 
-sub msgCLIIconHex
-{
+sub msgCLIIconHex {
 	# pop value
     my $self = shift();
 
@@ -368,15 +565,15 @@ sub msgCLIIconHex
 	{
 		my $hexResult = shift();
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'icon';
+		$self->optContentType('icon');
+		#$self->{m_OptType}	=	'icon';
 	}
 
     return $self->{m_MsgImage} if defined($self->{m_MsgImage}) || return undef;
 }
 
 
-sub msgFrom
-{
+sub msgFrom {
 	# pop value
     my $self = shift();
 	
@@ -386,12 +583,10 @@ sub msgFrom
     if (@_ == 1) { $self->{m_MsgFrom} = shift(); }
 
     return $self->{m_MsgFrom} if defined($self->{m_MsgFrom}) || return undef;
-
 }
 
 
-sub msgOperatorLogoFilename
-{
+sub msgOperatorLogoFilename {
 	# pop value
     my $self = shift();
 	
@@ -403,188 +598,181 @@ sub msgOperatorLogoFilename
 		my $file_path = shift();
 		my $hexResult = '';
 		my $buf;
+		my $fh;
 
-		open(fh, "< $file_path") || die "Can't open file \"$file_path\"";
-		binmode fh;
+		open($fh, "< $file_path") || die "Can't open file \"$file_path\"";
+		binmode $fh;
 
-		while(read fh, $buf, 1)
+		while(read $fh, $buf, 1)
 		{
 			$hexResult .= sprintf( "%2.2lX",  ord($buf) );
 		}
 
-		close(fh);
+		close($fh);
 
 		$self->{m_MsgImageFilename} = $file_path;
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'logo';
+		$self->optContentType('logo');
+		#$self->{m_OptType}	=	'logo';
 	}
 
     return $self->{m_MsgImageFilename} if defined($self->{m_MsgImageFilename}) || return undef;
-
 }
 
 
-sub msgOperatorLogoHex
-{
+sub msgOperatorLogoHex {
 	# pop value
     my $self = shift();
 
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1)
-	{
+    if (@_ == 1) {
 		my $hexResult = shift();
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'logo';
+		$self->optContentType('logo');
+		#$self->{m_OptType}	=	'logo';
 	}
 
     return $self->{m_MsgImage} if defined($self->{m_MsgImage}) || return undef;
 }
 
 
-sub msgPictureFilename
-{
+sub msgPictureFilename {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1)
-	{
+    if (@_ == 1) {
 		my $file_path = shift();
 		my $hexResult = '';
 		my $buf;
+		my $fh;
 
-		open(fh, "< $file_path") || die "Can't open file \"$file_path\"";
-		binmode fh;
+		open($fh, "< $file_path") || die "Can't open file \"$file_path\"";
+		binmode $fh;
 
-		while(read fh, $buf, 1)
-		{
+		while (read $fh, $buf, 1) {
 			$hexResult .= sprintf( "%2.2lX",  ord($buf) );
 		}
 
-		close(fh);
+		close($fh);
 
 		$self->{m_MsgImageFilename} = $file_path;
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'picture';
+		$self->optContentType(CONTENT_TYPE_PICTURE);
+		#$self->{m_OptType}	=	'picture';
 	}
 
     return $self->{m_MsgImageFilename} if defined($self->{m_MsgImageFilename}) || return undef;
-
 }
 
 
-sub msgPictureHex
-{
+sub msgPictureHex {
 	# pop value
     my $self = shift();
 
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1)
-	{
+    if (@_ == 1) {
 		my $hexResult = shift();
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'picture';
+		$self->optContentType(CONTENT_TYPE_PICTURE);
+		#$self->{m_OptType}	=	'picture';
 	}
 
     return $self->{m_MsgImage} if defined($self->{m_MsgImage}) || return undef;
 }
 
 
-sub msgPin
-{
+sub destAddr {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_MsgPin} = shift(); }
+    if (@_ == 1) { $self->{m_DestAddr} = shift(); }
 
-    return $self->{m_MsgPin} if defined($self->{m_MsgPin}) || return undef;
+    return $self->{m_DestAddr} if defined($self->{m_DestAddr}) || return undef;
+}
 
+# DEPRECATED TO destAddr()
+sub msgPin {
+	destAddr(@_);
 }
 
 
-sub msgProfileName
-{
+sub msgProfileName {
 	# pop value
     my $self = shift();
 
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1)
-	{
-		$self->{m_MsgText} = shift();
-		$self->{m_OptType} = 'profile';
+    if (@_ == 1) {
+		$self->msgText(shift());
+		$self->optContentType(CONTENT_TYPE_PROFILE);
+		#$self->{m_OptType} = 'profile';
 	}
 
-	return $self->{m_MsgText} if defined($self->{m_MsgText}) || return undef;
-	
+	return $self->msgText();	
 }
 
 
-sub msgProfileRingtone
-{
+sub msgProfileRingtone {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1)
-	{
+    if (@_ == 1) {
 		$self->{m_MsgRingtone} = shift();
-		$self->{m_OptType}	=	'profile';
+		$self->optContentType(CONTENT_TYPE_PROFILE);
+		#$self->{m_OptType}	=	'profile';
 	}
 
     return $self->{m_MsgRingtone} if defined($self->{m_MsgRingtone}) || return undef;
-
 }
 
 
-sub msgProfileScreenSaverFilename
-{
+sub msgProfileScreenSaverFilename {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1)
-	{
+    if (@_ == 1) {
 		my $file_path = shift();
 		my $hexResult = '';
 		my $buf;
+		my $fh;
 
-		open(fh, "< $file_path") || die "Can't open file \"$file_path\"";
-		binmode fh;
+		open($fh, "< $file_path") || die "Can't open file \"$file_path\"";
+		binmode $fh;
 
-		while(read fh, $buf, 1)
-		{
+		while (read $fh, $buf, 1) {
 			$hexResult .= sprintf( "%2.2lX",  ord($buf) );
 		}
 
-		close(fh);
+		close($fh);
 
 		$self->{m_MsgImageFilename} = $file_path;
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'profile';
+		$self->optContentType(CONTENT_TYPE_PROFILE);
+		#$self->{m_OptType}	=	'profile';
 	}
 
     return $self->{m_MsgImageFilename} if defined($self->{m_MsgImageFilename}) || return undef;
-
 }
 
 
-sub msgProfileScreenSaverHex
-{
+sub msgProfileScreenSaverHex {
 	# pop value
     my $self = shift();
 
@@ -595,136 +783,173 @@ sub msgProfileScreenSaverHex
 	{
 		my $hexResult = shift();
 		$self->{m_MsgImage}	= $hexResult;
-		$self->{m_OptType}	=	'profile';
+		$self->optContentType(CONTENT_TYPE_PROFILE);
+		#$self->{m_OptType}	=	'profile';
 	}
-
     return $self->{m_MsgImage} if defined($self->{m_MsgImage}) || return undef;
 }
 
 
-sub msgRingtone
-{
+sub msgRingtone {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1)
-	{
+    if (@_ == 1) {
 		$self->{m_MsgRingtone} = shift();
-		$self->{m_OptType}	=	'ringtone';
+		$self->optContentType(CONTENT_TYPE_RINGTONE);
+		#$self->{m_OptType}	=	'ringtone';
 	}
-
     return $self->{m_MsgRingtone} if defined($self->{m_MsgRingtone}) || return undef;
-
 }
 
 
-sub msgSend
-{
+sub submit {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    return $self->send('sendpage');
+    $self->send('submit');
+    # return success/failure
+    return $self->success();
+}
+
+# DEPRECATED TO submit();
+sub msgSend {
+	submit(@_);
 }
 
 
-sub msgSendEx
-{
+# DEPRECATED, DON'T USE ANYMORE
+sub msgSendEx {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    $self->msgCarrierId(shift());
-    $self->msgPin(shift());
+    $self->networkId(shift());
+    $self->destAddr(shift());
     $self->msgFrom(shift());
-    $self->msgCallback(shift());
+    $self->sourceAddr(shift());
     $self->msgText(shift());
 
-    return $self->send('sendpage');
+    return $self->submit();
 }
 
-
-sub msgStatusCode
-{
+sub statusCode {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_MsgStatusCode} = shift(); }
+    if (@_ == 1) { $self->{m_StatusCode} = shift(); }
 
-    return $self->{m_MsgStatusCode} if defined($self->{m_MsgStatusCode}) || return undef;
-
+    return $self->{m_StatusCode} if defined($self->{m_StatusCode}) || return undef;
 }
 
 
-sub msgStatusDesc
-{
+# DEPRECATED TO statusCode()
+sub msgStatusCode {
+	statusCode(@_);
+}
+
+
+sub statusDescription {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_MsgStatusDesc} = shift(); }
+    if (@_ == 1) { $self->{m_StatusDescription} = shift(); }
 
-    return $self->{m_MsgStatusDesc} if defined($self->{m_MsgStatusDesc}) || return undef;
-
+    return $self->{m_StatusDescription} if defined($self->{m_StatusDescription}) || return undef;
 }
 
 
-sub msgStatusSend
-{
+# DEPRECATED TO statusDescription
+sub msgStatusDesc {
+	statusDescription(@_);
+}
+
+
+sub query {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    return $self->send('checkstatus');
+    $self->send('query');
+    # return success/failure
+    return $self->success();
 }
 
 
-sub msgText
-{
+# DEPRECATED TO query()
+sub msgStatusSend {
+	query(@_);
+}
+
+
+sub msgData {
 	# pop value
     my $self = shift();
 
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_MsgText} = shift(); }
+    if (@_ == 1) { $self->{m_MsgData} = shift(); }
 
-	return $self->{m_MsgText} if defined($self->{m_MsgText}) || return undef;
-	
+	return $self->{m_MsgData} if defined($self->{m_MsgData}) || return undef;	
 }
 
 
-sub msgTicketID
-{
+# DEPRECATED TO msgData
+sub msgText {
+	msgData(@_);
+}
+
+
+sub ticketId {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_MsgTicketID} = shift(); }
+    if (@_ == 1) { $self->{m_TicketId} = shift(); }
 
-    return $self->{m_MsgTicketID} if defined($self->{m_MsgTicketID}) || return undef;
-
+    return $self->{m_TicketId} if defined($self->{m_TicketId}) || return undef;
 }
 
 
-sub optCountryCode
-{
+# DEPRECATED TO ticketId
+sub msgTicketID {
+	ticketId(@_);
+}
+
+
+sub ticketFee {
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    if (@_ == 1) { $self->{m_TicketFee} = shift(); }
+
+    return $self->{m_TicketFee} if defined($self->{m_TicketFee}) || return undef;
+}
+
+
+sub optCountryCode {
 	# pop value
     my $self = shift();
 
@@ -734,72 +959,65 @@ sub optCountryCode
     if (@_ == 1) { $self->{m_OptCountryCode} = shift(); }
 
     return $self->{m_OptCountryCode} if defined($self->{m_OptCountryCode}) || return undef;
-
 }
 
 
-sub optDataCoding
-{
+sub optEncoding {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_OptDataCoding} = shift(); }
+    if (@_ == 1) {
+    	# we're being set
+    	my $var = shift;
+		# validate the argument
+		my $success = _validate_constant($var, \@ENC);
 
-    return $self->{m_OptDataCoding} if defined($self->{m_OptDataCoding}) || return undef;
+		if ($success == 1) {
+		   $self->{m_OptEncoding} = $var;
+		} else {
+		   die "You must set optEncoding to one of the following: " . join(", ", @ENC) . "\n";
+		}
+    }
+    
+    # we are being read
+    return $self->{m_OptEncoding} if defined($self->{m_OptEncoding}) || return undef;
+}
 
+# DEPRECATED TO optEncoding
+sub optDataCoding {
+	optEncoding(@_);
 }
 
 
-sub optDelimiter
-{
+# DEPRECATED
+sub optDelimiter {
+	# do nothing
+}
+
+
+# DEPRECATED
+sub optFields {
+	# do nothing
+}
+
+
+sub optFlash {
 	# pop value
     my $self = shift();
 
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_OptDelimiter} = shift(); }
-
-    return $self->{m_OptDelimiter} if defined($self->{m_OptDelimiter}) || return undef;
-
-}
-
-
-sub optFields
-{
-	# pop value
-    my $self = shift();
-	
-	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
-
-    if (@_ == 1) { $self->{m_OptFields} = shift(); }
-
-    return $self->{m_OptFields} if defined($self->{m_OptFields}) || return undef;
-
-}
-
-
-sub optFlash
-{
-	# pop value
-    my $self = shift();
-
-	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
-
-    if (@_ == 1) { $self->{m_OptFlash} = shift(); }
+    if (@_ == 1) { $self->{m_OptFlash} = _validate_bool(shift()); }
 
     return $self->{m_OptFlash} if defined($self->{m_OptFlash}) || return undef;
-
 }
 
 
-sub optNetworkCode
-{
+sub optNetworkCode {
 	# pop value
     my $self = shift();
 
@@ -809,12 +1027,10 @@ sub optNetworkCode
     if (@_ == 1) { $self->{m_OptNetworkCode} = shift(); }
 
     return $self->{m_OptNetworkCode} if defined($self->{m_OptNetworkCode}) || return undef;
-
 }
 
 
-sub optPhone
-{
+sub optPhone {
 	# pop value
     my $self = shift();
 	
@@ -824,38 +1040,60 @@ sub optPhone
     if (@_ == 1) { $self->{m_OptPhone} = shift(); }
 
     return $self->{m_OptPhone} if defined($self->{m_OptPhone}) || return undef;
-
 }
 
 
-sub optTimeout
-{
+# DEPRECATED
+sub optTimeout {
+	# do nothing
+}
+
+
+# DEPRECATED to optContentType
+sub optType {
+	optContentType(@_);
+}
+
+
+sub optUrl {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_OptTimeout} = shift(); }
+    if (@_ == 1) { $self->{m_OptUrl} = shift(); }
 
-    return $self->{m_OptTimeout} if defined($self->{m_OptTimeout}) || return undef;
-
+    return $self->{m_OptUrl} if defined($self->{m_OptUrl}) || return undef;
 }
 
 
-sub optType
-{
+sub optUdhi {
 	# pop value
-    my $self = shift();
-	
+	my $self = shift();
+
 	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
+	die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_OptType} = shift(); }
-
-    return $self->{m_OptType} if defined($self->{m_OptType}) || return undef;
-
+	if (@_ == 1) { $self->{m_OptUdhi} = _validate_bool(shift());}
+	
+    return $self->{m_OptUdhi} if defined($self->{m_OptUdhi}) || return undef;
 }
+
+
+# sets/gets the User Data Header as raw byte string
+sub udh {
+	# pop value
+	my $self = shift();
+
+	# check to make sure that this function is being called on an object
+	die "You must instantiate an object to use this function" if !(ref($self));
+
+	if (@_ == 1) { $self->{m_Udh} = shift(); }
+	
+    return $self->{m_Udh} if defined($self->{m_Udh}) || return undef;
+}
+
 
 ############################################
 # EMS Functionality
@@ -871,9 +1109,8 @@ sub optType
 # emsAddUserPromptIndicator()
 ############################################
 
-sub optContentType
-{
-	# This function deprecates the optType function and requires
+sub optContentType {
+	# this function deprecates the optType function and requires
 	# a list of constants. So check for 'em
 	
 	# pop value
@@ -882,35 +1119,26 @@ sub optContentType
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { 
-	   
+    if (@_ == 1) {
 	   # we're being set
 	   my $var = shift;
-	   
-	   my @opts = ("ringtone", "icon", "logo", "picture", "profile", "setting", "ems");
-       my $success = 0;
-	   foreach my $opt (@opts) {
-	       $success = 1 if ($var eq $opt);
-	   }
+	   # validate the argument
+	   my $success = _validate_constant($var, \@CONTENT_TYPE);
 	   
 	   if ($success == 1) {
 	       # set both vars so we don't break anything
 		   # eventually optType should be phased out
 		   $self->{m_OptContentType} = $var;
-		   $self->{m_OptType} = $var;
 	   } else {
-	       die "You must set optContentType to one of the following: " . join(", ", @opts) . "\n";
+	       die "You must set optContentType to one of the following: " . join(", ", @CONTENT_TYPE) . "\n";
 	   }
-	   
 	}
 
 	# we're being read
     return $self->{m_OptContentType} if defined($self->{m_OptContentType}) || return undef;
-
 }
 
-sub priv_emsAddElement
-{
+sub priv_emsAddElement {
     # Private function that appends to the
 	# $self->{m_EmsElements} array
     # 
@@ -946,8 +1174,8 @@ sub priv_emsAddElement
 	
 }
 
-sub emsAddText
-{
+sub emsAddText {
+
 	# pop value
     my $self = shift();
 	
@@ -959,8 +1187,8 @@ sub emsAddText
 	
 }
 
-sub emsAddPredefinedSound
-{
+sub emsAddPredefinedSound {
+
     # EMS Predefined Sound
 	# 0 Chimes high
 	# 1 Chimes low
@@ -991,11 +1219,9 @@ sub emsAddPredefinedSound
 	    die "You must use a Predefined Sound between 0 and 9. Please see the perldoc.";
 	
 	}
-
 }
 
-sub emsAddPredefinedAnimation
-{
+sub emsAddPredefinedAnimation {
 
     # EMS Predefined anim
     # 0 I am ironic, flirty
@@ -1032,11 +1258,10 @@ sub emsAddPredefinedAnimation
 	    die "You must use a Predefined Animation between 0 and 14. Please see the perldoc.";
 	
 	}
-
 }
 
-sub emsAddUserDefinedSound
-{
+sub emsAddUserDefinedSound {
+
     # EMS User Defined Sound
 	# User defined sounds are sent over the air interface. They are monophonic only,
     # use the iMelody format, and have a maximum length of 128 Bytes (without the
@@ -1053,8 +1278,8 @@ sub emsAddUserDefinedSound
 
 }
 
-sub emsAddSmallPicture
-{
+sub emsAddSmallPicture {
+
 	# EMS Small pictures are 16x16 pixels, Black and white
 	# pop value
     my $self = shift();
@@ -1066,24 +1291,25 @@ sub emsAddSmallPicture
     my $file_path = shift();
     my $hexResult = '';
     my $buf;
+    my $fh;
 
-    open(fh, "< $file_path") || die "Can't open file \"$file_path\"";
-    binmode fh;
+    open($fh, "< $file_path") || die "Can't open file \"$file_path\"";
+    binmode $fh;
 
-    while(read fh, $buf, 1)
+    while(read $fh, $buf, 1)
     {
         $hexResult .= sprintf( "%2.2lX",  ord($buf) );
     }
 
-    close(fh);
+    close($fh);
 
 	# append content to m_EmsElements with helper function
 	$self->priv_emsAddElement("picture", "small", $hexResult);
 
 }
 
-sub emsAddSmallPictureHex
-{
+sub emsAddSmallPictureHex {
+
 	# EMS Small pictures are 16x16 pixels, Black and white
 	# pop value
     my $self = shift();
@@ -1096,8 +1322,8 @@ sub emsAddSmallPictureHex
 
 }
 
-sub emsAddLargePicture
-{
+sub emsAddLargePicture {
+
 	# EMS Large pictures are 32x32 pixels or of variable size
 	# maximum 128 bytes, where width is a multiple of 8 pixels, Black and white
 	# Larger pictures may be sent, but the word "join" must be placed
@@ -1113,24 +1339,24 @@ sub emsAddLargePicture
     my $file_path = shift();
     my $hexResult = '';
     my $buf;
+    my $fh;
 
-    open(fh, "< $file_path") || die "Can't open file \"$file_path\"";
-    binmode fh;
+    open($fh, "< $file_path") || die "Can't open file \"$file_path\"";
+    binmode $fh;
 
-    while(read fh, $buf, 1)
+    while(read $fh, $buf, 1)
     {
         $hexResult .= sprintf( "%2.2lX",  ord($buf) );
     }
 
-    close(fh);
+    close($fh);
 
 	# append content to m_EmsElements with helper function
 	$self->priv_emsAddElement("picture", "large", $hexResult);
-
 }
 
-sub emsAddLargePictureHex
-{
+sub emsAddLargePictureHex {
+
 	# EMS Large pictures are 32x32 pixels or of variable size
 	# maximum 128 bytes, where width is a multiple of 8 pixels, Black and white
 	# Larger pictures may be sent, but the word "join" must be placed
@@ -1147,8 +1373,8 @@ sub emsAddLargePictureHex
 
 }
 
-sub emsAddUserPromptIndicator
-{
+sub emsAddUserPromptIndicator {
+
     # EMS User Prompt Indicator
 	# This feature introduced in 3GPP TS 23.040 Release 4 allows handsets to stitch
 	# pictures and user-defined sounds. It also allows the user to be prompted upon
@@ -1173,8 +1399,7 @@ sub emsAddUserPromptIndicator
 ############################################
 
 
-sub requestXML
-{
+sub requestXML {
 	# pop value
     my $self = shift();
 	
@@ -1184,12 +1409,10 @@ sub requestXML
     if (@_ == 1) { $self->{m_RequestXML} = shift(); }
 
     return $self->{m_RequestXML} if defined($self->{m_RequestXML}) || return undef;
-
 }
 
 
-sub responseXML
-{
+sub responseXML {
 	# pop value
     my $self = shift();
 	
@@ -1199,74 +1422,54 @@ sub responseXML
     if (@_ == 1) { $self->{m_ResponseXML} = shift(); }
 
     return $self->{m_ResponseXML} if defined($self->{m_ResponseXML}) || return undef;
-
 }
 
 
-sub serverDomain
-{
+sub remoteHost {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_ServerDomain} = shift(); }
+    if (@_ == 1) { $self->{m_RemoteHost} = shift(); }
 
-    return $self->{m_ServerDomain} if defined($self->{m_ServerDomain}) || return undef;
-
+    return $self->{m_RemoteHost} if defined($self->{m_RemoteHost}) || return undef;
 }
 
 
-sub serverName
-{
+sub remotePort {
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_ServerName} = shift(); }
+    if (@_ == 1) { $self->{m_RemotePort} = shift(); }
 
-    return $self->{m_ServerName} if defined($self->{m_ServerName}) || return undef;
-
+    return $self->{m_RemotePort} if defined($self->{m_RemotePort}) || return undef;
 }
 
 
-sub serverPort
-{
-	# pop value
-    my $self = shift();
-	
-	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
-
-    if (@_ == 1) { $self->{m_ServerPort} = shift(); }
-
-    return $self->{m_ServerPort} if defined($self->{m_ServerPort}) || return undef;
-
+# DEPRECATED, BUT JUST MAPS TO REMOTE PORT
+sub serverPort {
+	remotePort(@_);
 }
 
 
-sub subscriberID
-{
-	# pop value
-    my $self = shift();
-	
-	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
-
-    my $var = shift();
-
-    if (defined($var)) { $self->{m_SubscriberID} = $var; }
-
-    return $self->{m_SubscriberID};
-
+# DEPRECATED IN 2.6.0, SEE REMOTE HOST
+sub serverDomain {
+	# do nothing
 }
 
 
-sub subscriberPassword
-{
+# DEPRECATED IN 2.6.0, SEE REMOTE HOST
+sub serverName {
+	# do nothing
+}
+
+
+sub accountId {
 	# pop value
     my $self = shift();
 	
@@ -1275,15 +1478,38 @@ sub subscriberPassword
 
     my $var = shift();
 
-    if (defined($var)) { $self->{m_SubscriberPassword} = $var; }
+    if (defined($var)) { $self->{m_AccountId} = $var; }
 
-    return $self->{m_SubscriberPassword};
+    return $self->{m_AccountId} if defined($self->{m_AccountId}) || return undef;
+}
 
+# DEPRECATED TO accountId()
+sub subscriberID {
+	accountId(@_);
 }
 
 
-sub success
-{
+sub accountPassword {
+	# pop value
+    my $self = shift();
+	
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    my $var = shift();
+
+    if (defined($var)) { $self->{m_AccountPassword} = $var; }
+	
+    return $self->{m_AccountPassword} if defined($self->{m_AccountPassword}) || return undef;
+}
+
+# DEPRECATED TO accountPassword()
+sub subscriberPassword {
+	accountPassword(@_);
+}
+
+
+sub success {
 	# pop value
     my $self = shift();
 	
@@ -1291,75 +1517,60 @@ sub success
     die "You must instantiate an object to use this function" if !(ref($self));
 
     # if the error_code is between 0 and 10 then its an okay response.
-    if ($self->errorCode >= 0 and $self->errorCode <= 10 and $self->errorCode ne "")
-	{
+    if ($self->errorCode >= 0 and $self->errorCode <= 10 and $self->errorCode ne "") {
         return 1;
     }
-
-    return 0;
-
-}
-
-
-sub synchronous
-{
-	# Deprecated. Does nothing. Here for backward compatibility.
-
-	# pop value
-    my $self = shift();
-
-	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
-}
-
-
-sub userIP
-{
-	# pop value
-    my $self = shift();
-	
-	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
-
-    my $var = shift();
-
-    if (defined($var)) { $self->{m_UserIP} = $var; }
-
-    return $self->{m_UserIP};
-
-}
-
-
-sub userAgent
-{
     
-    # Deprecated userAgent version 2.13
-
-	# pop value
-    my $self = shift();
-	
-	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
-
-    return '';
-
+    return 0;
 }
 
-sub	proxyType
-{
+
+# DEPRECATED Does nothing. Here for backward compatibility.
+sub synchronous {
+	# do nothing
+}
+
+# DEPRECATED - DON'T USE
+sub userIP {
+	# do nothing
+}
+
+# READ-ONLY
+sub userAgent {
+	# pop value
+    my $self = shift();
+    
+	# check to make sure that this function is being called on an object
+    die "You must instantiate an object to use this function" if !(ref($self));
+
+    return $self->{m_UserAgent};
+}
+
+sub	proxyType {
 	# pop value
     my $self = shift();
 
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    if (@_ == 1) { $self->{m_ProxyType} = shift(); }
+	if (@_ == 1) {
+		# we're being set
+		my $var = shift;
+		# validate the argument
+		my $success = _validate_constant($var, \@PROXY_TYPE);
+
+		if ($success == 1) {
+		   $self->{m_ProxyType} = $var;
+		} else {
+		   die "You must set proxyType to one of the following: " . join(", ", @PROXY_TYPE) . "\n";
+		}
+    }
 
     return $self->{m_ProxyType} if defined($self->{m_ProxyType}) || return undef;
 }
 
-sub	proxyServer
-{
+
+sub	proxyHost {
 	# pop value
     my $self = shift();
 
@@ -1372,8 +1583,13 @@ sub	proxyServer
 }
 
 
-sub	proxyPort
-{
+# DEPRECATED TO proxyHost
+sub	proxyServer {
+	proxyHost(@_);
+}
+
+
+sub	proxyPort {
 	# pop value
     my $self = shift();
 	
@@ -1386,24 +1602,7 @@ sub	proxyPort
 }
 
 
-sub	proxyUserName
-{
-	# This is a pass-through function to proxyUsername
-
-	# pop value
-    my $self = shift();
-	
-	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
-
-    if (@_ == 1) { $self->proxyUsername( shift() ); }
-
-    return $self->proxyUsername if defined($self->proxyUsername) || return undef;
-}
-
-
-sub	proxyUsername
-{
+sub	proxyUsername {
 	# pop value
     my $self = shift();
 
@@ -1415,9 +1614,13 @@ sub	proxyUsername
     return $self->{m_ProxyUsername} if defined($self->{m_ProxyUsername}) || return undef;
 }
 
+# DEPRECATED - SPELLED WRONG
+sub proxyUserName {
+	proxyUsername(@_);	
+}
 
-sub	proxyPassword
-{
+
+sub	proxyPassword {
 	# pop value
     my $self = shift();
 	
@@ -1430,8 +1633,8 @@ sub	proxyPassword
 }
 
 
-sub toXML
-{
+sub toXML {
+
 	# pop value
     my $self = shift();
 
@@ -1443,237 +1646,194 @@ sub toXML
     #-----------------------------------------------------------------
 
     my $xml =<<ENDXML;
-<?xml version="$self->{m_XMLVersion}" ?>
-<request version="$self->{m_RequestVersion}" protocol="$self->{m_RequestProtocol}" type="$self->{m_RequestType}">
-    <user agent="$self->{m_UserAgent}" ip="$self->{m_UserIP}"/>
-    <subscriber id="$self->{m_SubscriberID}" password="$self->{m_SubscriberPassword}"/>
+<?xml version="1.0" ?>
+<request version="$self->{m_Version}" protocol="$self->{m_Protocol}" type="$self->{m_Type}">
+    <user agent="$self->{m_UserAgent}"/>
+    <account id="$self->{m_AccountId}" password="$self->{m_AccountPassword}"/>
 ENDXML
 
     #-----------------------------------------------------------------
-    # If sendpage
+    # If submit
     #-----------------------------------------------------------------
-    if ($self->isMsg)
-	{
+    if ($self->isSubmit) {
+    	#
+		# add <option> attributes
+		#
+		$xml .= "    <option";
+
+		if (defined($self->optCountryCode)) {
+			$xml .= ' countrycode="' . $self->optCountryCode . '"';
+		}
+
+		if (defined($self->optEncoding)) {
+			$xml .= ' encoding="' . $self->optEncoding . '"';
+		}
+
+		if (defined($self->optFlash)) {
+			$xml .= ' flash="' . _return_bool($self->optFlash) . '"';
+		}
+
+		if (defined($self->optNetworkCode)) {
+			$xml .= ' networkcode="' . $self->optNetworkCode . '"';
+		}
+
+		if (defined($self->optPhone)) {
+			$xml .= ' phone="' . $self->optPhone . '"';
+		}
+
+		if (defined($self->optContentType)) {
+			$xml .= ' type="' . $self->optContentType . '"';
+		}
+
+		if (defined($self->optUrl)) {
+			$xml .= ' url="' . $self->optUrl . '"';
+		}
+
+		$xml .= "/>\n";
+
+        #
+        # add <dest> attributes
+        #
+        #$xml .= "    <dest";
+		
+		#if (defined($self->networkId)) {
+		#	$xml .= ' serviceid="' . $self->networkId . '"';
+		#}
+		
+		#if (defined($self->destAddr)) {
+		#	$xml .= ' pin="' . $self->destAddr . '"';
+		#}
+		
+		#$xml .= "/>\n";
+		
+		#
+		# add <source> attributes
+		#
+		#$xml .= "    <source";
+
+		#if (defined($self->sourceAddr)) {
+		#	$xml .= ' addr="' . $self->sourceAddr . '"';
+		#}
+
+		#$xml .= "/>\n";
+		
+        #
+        # add <message> attributes
+        #
+		$xml .= "    <page";
+
+		if (defined($self->networkId)) {
+			$xml .= ' serviceid="' . $self->networkId . '"';
+		}
+
+		if (defined($self->destAddr)) {
+			$xml .= ' pin="' . $self->destAddr . '"';
+		}
+		
+		if (defined($self->sourceAddr)) {
+			$xml .= ' callback="' . $self->sourceAddr . '"';
+		}
+
+		if (defined($self->msgFrom)) {
+			$xml .= ' from="' . unicode_encode($self->msgFrom) . '"';
+		}
+
+		if (defined($self->msgText)) {
+			$xml .= ' text="' . unicode_encode($self->msgText) . '"';
+		}
+
+		if (defined($self->msgRingtone)) {
+			$xml .= ' ringtone="' . html_encode( $self->msgRingtone) . '"';
+		}
+
+		if (defined($self->{m_MsgImage})) {
+			$xml .= ' image="' . $self->{m_MsgImage} . '"';
+		}
+
+		$xml .= ">\n";
+
+		# EMS FUNCTIONALITY
+		# Check to see if EMS was added and place it here
+		#print "checking to see if we have ems...\n";
+
+		if (defined($self->{m_EmsElements}) && $#{$self->{m_EmsElements}} >= 0) {
+
+		   #print "We have EMS\n";
+
+		   # start ems element
+		   $xml .= "\t<ems>\n";
+
+		   # add all ems elements
+		   my @arr = @{ $self->{m_EmsElements} };
+		   foreach my $item (@arr) {
+
+			   #print $item->{name} . "\n";
+			   $xml .= "<" . $item->{name};
+
+			   # if type exists, then add it
+			   if ($item->{type} ne "") {
+				  $xml .= " type=\"" . $self->html_encode($item->{type}) . "\"";
+			   }
+
+			   # if value exists, then add it
+			   if ($item->{value} ne "") {
+				  $xml .= " value=\"";
+
+				  # if type is text, unicode escape
+				  if ($item->{name} eq "text") {
+					 $xml .= $self->unicode_encode($item->{value});   				  
+				  } elsif ($item->{name} eq "sound") {
+					 # sounds need to only have newlines escaped
+					 my $tmp = $item->{value};
+					 $tmp =~ s/\n/&#10;/g;
+					 $tmp =~ s/\r\n/&#10;/g;
+					 $xml .= $tmp;
+					 #$xml .= $self->unicode_encode($item->{value});						 
+				  } else {
+					 $xml .= $self->html_encode($item->{value});
+				  }
+				  $xml .= "\"";
+			   }
+
+			   # end element
+			   $xml .= "/>\n";
+
+		   } # foreach loop
+
+		   # end ems tag
+		   $xml .= "\t</ems>\n";
+
+		}
+		# End EMS
+
+		$xml .= "    </page>\n";
+
+    #-----------------------------------------------------------------
+	# If query()
+    #-----------------------------------------------------------------
+    } elsif ($self->isQuery) {
 
 		# Check to see if any options were set for the sendpage
-    	if (defined($self->optCountryCode) or defined($self->optDataCoding) or
-			defined($self->optDelimiter) or defined($self->optNetworkCode) or
-			defined($self->optPhone) or defined($self->optType) )
-		{
-    		$xml .= "    <option";
-
-			# Set the country code option
-		    if (defined($self->optCountryCode))
-			{
-				$xml .= ' countrycode="' . html_encode( $self->optCountryCode ) . '"';
-            }
-
-    		# Set the data coding option
-            if (defined($self->optDataCoding))
-			{
-                $xml .= ' datacoding="' . html_encode( $self->optDataCoding ) . '"';
-            }
-
-    		# Set the delimiter option
-            if (defined($self->optDelimiter))
-			{
-                $xml .= ' delimiter="' . html_encode($self->optDelimiter) . '"';
-            }
-
-            # Set the flash option
-            if (defined($self->optFlash))
-			{
-                $xml .= ' flash="' . html_encode($self->optFlash) . '"';
-            }
-
-			# Set the network code option
-		    if (defined($self->optNetworkCode))
-			{
-				$xml .= ' networkcode="' . html_encode( $self->optNetworkCode ) . '"';
-            }
-
-			# Set the phone type option
-		    if (defined($self->optPhone))
-			{
-				$xml .= ' phone="' . html_encode( $self->optPhone ) . '"';
-            }
-
-			# Set the timeout option
-            if (defined($self->optTimeout))
-			{
-                $xml .= ' timeout="' . $self->optTimeout . '"';
-            }
-
-            # Set the type option
-		    if (defined($self->optType))
-			{
-				$xml .= ' type="' . html_encode( $self->optType ) . '"';
-            }
-
-			$xml .= "/>\n";
-        }
-
-        # Check to see if any page items were set for the sendpage
-
-    	if (defined($self->msgCarrierID) or defined($self->msgPin) or
-			defined($self->msgFrom) or defined($self->msgCallback) or
-			defined($self->msgText) or defined($self->msgRingtone) or
-			defined($self->{m_MsgImage}) or defined($self->{m_EmsElements}) )
-		{
-    		$xml .= "    <page";
-
-
-			if (defined( $self->msgCarrierID))
-			{
-                $xml .= ' serviceid="' . html_encode( $self->msgCarrierID ) . '"';
-            }
-
-            if (defined($self->msgPin))
-			{
-                $xml .= ' pin="' . html_encode( $self->msgPin ) . '"';
-            }
-
-            if (defined($self->msgFrom))
-			{
-                $xml .= ' from="' . unicode_encode( $self->msgFrom ) . '"';
-            }
-
-            if (defined($self->msgCallback))
-			{
-                $xml .= ' callback="' . html_encode( $self->msgCallback ) . '"';
-            }
-
-			if (defined($self->msgText))
-			{
-				$xml .= ' text="' . unicode_encode( $self->msgText ) . '"';
-			}
-
-			if (defined($self->msgRingtone))
-			{
-				$xml .= ' ringtone="' . html_encode( $self->msgRingtone ) . '"';
-			}
-
-			if (defined($self->{m_MsgImage}))
-			{
-				$xml .= ' image="' . $self->{m_MsgImage} . '"';
-			}
-
-			$xml .= ">\n";
-			
-			# EMS FUNCTIONALITY
-			# Check to see if EMS was added and place it here
-			#print "checking to see if we have ems...\n";
-			
-			if (defined($self->{m_EmsElements}) && $#{$self->{m_EmsElements}} >= 0) {
-			
-			   #print "We have EMS\n";
-			   
-			   # start ems element
-			   $xml .= "\t<ems>\n";
-			   
-			   # add all ems elements
-			   my @arr = @{ $self->{m_EmsElements} };
-			   foreach my $item (@arr) {
-			   
-		           #print $item->{name} . "\n";
-				   $xml .= "<" . $item->{name};
-				   
-				   # if type exists, then add it
-				   if ($item->{type} ne "") {
-				      $xml .= " type=\"" . $self->html_encode($item->{type}) . "\"";
-				   }
-				   
-				   # if value exists, then add it
-				   if ($item->{value} ne "") {
-				      $xml .= " value=\"";
-					  
-					  # if type is text, unicode escape
-					  if ($item->{name} eq "text") {
- 				      
-					     $xml .= $self->unicode_encode($item->{value});   				  
-					  
-					  } elsif ($item->{name} eq "sound") {
-					     
-						 # sounds need to only have newlines escaped
-						 my $tmp = $item->{value};
-						 $tmp =~ s/\n/&#10;/g;
-						 $tmp =~ s/\r\n/&#10;/g;
-						 $xml .= $tmp;
-					     #$xml .= $self->unicode_encode($item->{value});						 
-						 
-					  } else {
-				      
-					     $xml .= $self->html_encode($item->{value});
-					  
-					  }
-					  
-					  $xml .= "\"";
-					  
-				   }
-				   
-				   # end element
-				   $xml .= "/>\n";
-			   
-			   } # foreach loop
-			   
-			   # end ems tag
-			   $xml .= "\t</ems>\n";
-						   
-			}
-			# End EMS
-
-		    $xml .= "    </page>\n";
-			
-        } # End page element
-
-    }
-
-    #-----------------------------------------------------------------
-    # If checkstatus
-    #-----------------------------------------------------------------
-	elsif ($self->isMsgStatus)
-	{
-
-		# Check to see if any options were set for the sendpage
-    	if (defined($self->msgTicketID))
-		{
+    	if (defined($self->ticketId)) {
     		$xml .= "    <ticket";
-
-			# Set the method option
-			if (defined($self->msgTicketID))
-			{
-                $xml .= ' id="' . html_encode($self->msgTicketID) . '"';
+			# set the ticket id
+			if (defined($self->ticketId)) {
+                $xml .= ' id="' . $self->ticketId . '"';
             }
-
 			$xml .= "/>\n";
         }
 
-    }
-
+	#-----------------------------------------------------------------
+	# If list
     #-----------------------------------------------------------------
-    # If servicelist
+    } elsif ($self->isList) {
+		# no options to set for network list
+    
     #-----------------------------------------------------------------
-	elsif ($self->isCarrierlist)
-	{
-        # Check to see if any options were set for the servicelist
-    	if (defined($self->optFields) or defined($self->optType))
-		{
-    		$xml .= "    <option";
-
-			# Set the fields option
-			if (defined($self->optFields))
-			{
-                $xml .= ' fields="' . html_encode( $self->optFields ) . '"';
-            }
-
-            # Set the type option
-            if (defined($self->optType))
-			{
-                $xml .= ' type="' . html_encode( $self->optType ) . '"';
-            }
-
-    		$xml .= "/>";
-        }
+	# If account
+	#-----------------------------------------------------------------
+	} elsif ($self->isAccount) {
+		# no options to set for account information
     }
 
 
@@ -1684,8 +1844,7 @@ ENDXML
 
 	$self->{m_RequestXML} = $xml;
 
-	if( $self->{DEBUG} )
-	{
+	if ($self->{DEBUG}) {
 		print 'REQUEST XML ==' . "\n" . $self->{m_RequestXML} . "\n";
 	}
 
@@ -1693,415 +1852,308 @@ ENDXML
 }
 
 
-sub xmlParse
-{
+# REMOVED v2.6.0
+#sub xmlParse {
+#	# pop value
+#    my $self = shift();
+	
+#	# check to make sure that this function is being called on an object
+#    die "You must instantiate an object to use this function" if !(ref($self));
+
+#    return $self->xmlParseEx($self->toXML());
+#}
+
+
+# parses both requests and responses
+# handles both WMP v2.0 and WMP v2.5
+sub parse {
+
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-    return $self->xmlParseEx($self->toXML());
+    if (@_ ne "1") { die "You must pass XML for this function to parse"; }
+
+    my $xml = shift();
+
+	# create new parser
+    my $parser = new XML::Parser(Handlers => {	Init => sub { $self->_handle_init(@_) },
+    											Final => sub { $self->_handle_final(@_) },
+    											Start => sub { $self->_handle_start(@_) },
+	                                          	End   => sub { $self->_handle_end(@_) } } );
+    
+    # begin parsing xml
+	$parser->parse($xml);
 }
 
-
-sub xmlParseEx
-{
-	# pop value
-    my $self = shift();
+sub _handle_start {
+	my $self = shift();
+	my $expat = shift();
+	my $element = shift();
+    my @attrs = @_;
 	
-	# check to make sure that this function is being called on an object
-    die "You must instantiate an object to use this function" if !(ref($self));
-
-
-    if (@_ ne "1") { die "You must pass XML for this functiont to parse"; }
-
-    $self->{ m_ResponseXML } = shift();
-
-	if( $self->{DEBUG})
-	{
-		print 'RESPONSE XML == ' . "\n" . $self->{ m_ResponseXML } . "\n";
-	}
-
-    my $parser = new XML::DOM::Parser;
-
-    # Begin parsing XML post so we can process this transaction
-	my $doc = $parser->parsestring ($self->{ m_ResponseXML });
-
-    # Check for <response> element
-    my $response = $doc->getElementsByTagName ("response");
-
-    if ($response->getLength() != 1)
-	{
-        $doc->dispose();
-        $self->raise_error(101);
-        return;
-    }
-
-    # At this point, the document should be validated
-    $response = $doc->getDocumentElement();
-
-
-    ##################################################################
-    # Parse required <response> attributes
-    ##################################################################
-
-	#-----------------------------------------------------------------
-	# Parse <response> version attribute
-        #-----------------------------------------------------------------
-	my $response_version = $response->getAttributeNode("version");
-
-    if (!defined($response_version))
-	{
-        $doc->dispose();
-        $self->raise_error(102);
-        return;
-    }
-
-    $self->{m_ResponseVersion} = $response_version->getValue();
-
-
-    #-----------------------------------------------------------------
-	# Parse <response> protocol attribute
-    #-----------------------------------------------------------------
-	my $response_protocol = $response->getAttributeNode("protocol");
-
-    if (!defined($response_protocol))
-	{
-        $doc->dispose();
-        $self->raise_error(103);
-        return;
-    }
-
-    $self->{m_ResponseProtocol} = $response_protocol->getValue();
-
-
-    #-----------------------------------------------------------------
-	# Parse <response> type attribute
-    #-----------------------------------------------------------------
-	my $response_type = $response->getAttributeNode("type");
-
-    if (!defined($response_type))
-	{
-        $doc->dispose();
-        $self->raise_error(104);
-        return;
-    }
-
-    my $type = $response_type->getValue();
+	#print "inside start -> " . $self . "\n";
+	#print "element -> " . $element . "\n";
 	
-    if ($type eq "sendpage")
-	{
-        $self->{m_ResponseType} = "sendpage";
-    }
-	elsif ($type eq "checkstatus")
-	{
-		$self->{m_ResponseType} = "checkstatus";
-    }
-	elsif ($type eq "servicelist")
-	{
-		$self->{m_ResponseType} = "servicelist";
-    }
-	else
-	{
-		# Do nothing here, so error code and desc can be retrieved.
-    }
-
-    ##################################################################
-    # Parse Errors
-    ##################################################################
-
-    my $errors = $doc->getElementsByTagName("error");
-
-    if ($errors->getLength() > 0)
-	{
-		my $error = $errors->item(0);
-
-        # Now get attributes for the error element
-
-        #-----------------------------------------------------------------
-		# Parse <error> code attribute
-        #-----------------------------------------------------------------
-		my $error_code = $error->getAttributeNode("code");
-
-	    if (defined($error_code))
-		{
-        	$self->errorCode($error_code->getValue());
-	    }
-
-        #-----------------------------------------------------------------
-	    # Parse <error> description attribute
-	    #-----------------------------------------------------------------
-		my $error_desc = $error->getAttributeNode("description");
-
-	    if (defined($error_desc))
-		{
-        	$self->errorDesc($error_desc->getValue());
-	    }
-
-        #-----------------------------------------------------------------
-	    # Parse <error> resolution attribute
-	    #-----------------------------------------------------------------
-		my $error_resolution = $error->getAttributeNode("resolution");
-
-	    if (defined($error_resolution))
-		{
-        	$self->errorResolution($error_resolution->getValue());
-	    }
+	# select which function to use for parsing
+	if ($element eq "request") {
+		$self->_parse_request(@attrs);
+	} elsif ($element eq "response") {
+		$self->_parse_response(@attrs);
+	} elsif ($element eq "error") {
+		$self->_parse_error(@attrs);
+	} elsif ($element eq "status") {
+		$self->_parse_status(@attrs);
+	} elsif ($element eq "ticket") {
+		$self->_parse_ticket(@attrs);
+	} elsif ($element eq "account") {
+		$self->_parse_account(@attrs);
+	} elsif ($element eq "subscriber") {
+		$self->_parse_account(@attrs);
+	} elsif ($element eq "dest") {
+		$self->_parse_dest(@attrs);
+	} elsif ($element eq "source") {
+		$self->_parse_source(@attrs);
+	} elsif ($element eq "option") {
+		$self->_parse_option(@attrs);
+	} elsif ($element eq "message") {
+		$self->_parse_message(@attrs);
+	} elsif ($element eq "page") {
+		$self->_parse_page(@attrs);
+	} else {
+		# unknown element type
 	}
+}
 
+sub _handle_end {
+	# do nothing...
+}
+     
+sub _handle_init {
+    # do nothing...
+}
 
-    ##################################################################
-    # Parse Status
-    ##################################################################
+sub _handle_final {  
+    # do nothing...
+}
 
-    my $stats = $doc->getElementsByTagName("status");
-
-    if ($stats->getLength() > 0)
-	{
-
-		my $status = $stats->item(0);
-
-        # Now get attributes for the status element
-
-            #----------------------------------------------------------------
-
-	    # Parse <status> code attribute
-	    #-----------------------------------------------------------------
-		my $status_code = $status->getAttributeNode("code");
-
-	    if (defined($status_code))
-		{
-        	$self->msgStatusCode($status_code->getValue());
-	    }
-
-		#-----------------------------------------------------------------
-		# Parse <status> description attribute
-		#-----------------------------------------------------------------
-		my $status_desc = $status->getAttributeNode("description");
-
-	    if (defined($status_desc))
-		{
-        	$self->msgStatusDesc($status_desc->getValue());
-	    }
-	}
-
-    ##################################################################
-    # Ticket
-    ##################################################################
-
-    my $tickets = $doc->getElementsByTagName("ticket");
-
-    if ($tickets->getLength() > 0)
-	{
-
-		my $ticket = $tickets->item(0);
-
-        # Now get attributes for the error element
-
-        #-----------------------------------------------------------------
-		# Parse <ticket> id attribute
-	    #-----------------------------------------------------------------
-		my $ticket_id = $ticket->getAttributeNode("id");
-
-	    if (defined($ticket_id))
-		{
-        	$self->msgTicketID($ticket_id->getValue());
-	    }
-	}
-
-
-    ##################################################################
-    # Parse service list return!
-    ##################################################################
-
-    my $services = $doc->getElementsByTagName("service");
-
-    # If Services Greater Than 1 Then Reset Service List
-    if ($services->getLength() > 0)
-	{
-		$self->{m_CarrierList} = [];
-    }
-
-    for (my $index = 0; $index < $services->getLength(); $index++)
-	{
-		my $service = $services->item($index);
-
-        # Construct a hash to put all the services into
-        my $s = {};
-
-		my $id = $service->getAttributeNode("id");
-
-	    if (defined($id))
-		{
-        	$s->{ID} = $id->getValue();
-	    }
-
-        my $title = $service->getAttributeNode("title");
-
-	    if (defined($title))
-		{
-        	$s->{Title} = $title->getValue();
-	    }
-
-        my $subtitle = $service->getAttributeNode("subtitle");
-
-	    if (defined($subtitle))
-		{
-        	$s->{SubTitle} = $subtitle->getValue();
-	    }
-
-        my $contenttype = $service->getAttributeNode("contenttype");
-
-	    if (defined($contenttype))
-		{
-        	$s->{ContentType} = $contenttype->getValue();
-	    }
-
-        my $pinrequired = $service->getAttributeNode("pinrequired");
-
-	    if (defined($pinrequired))
-		{
-        	$s->{PinRequired} = $pinrequired->getValue();
-	    }
-
-        my $pinminlength = $service->getAttributeNode("pinminlength");
-
-	    if (defined($pinminlength))
-		{
-        	$s->{PinMinLength} = $pinminlength->getValue();
-	    }
-
-        my $pinmaxlength = $service->getAttributeNode("pinmaxlength");
-
-	    if (defined($pinmaxlength))
-		{
-        	$s->{PinMaxLength} = $pinmaxlength->getValue();
-	    }
-
-        my $textrequired = $service->getAttributeNode("textrequired");
-
-	    if (defined($textrequired))
-		{
-        	$s->{TextRequired} = $textrequired->getValue();
-	    }
-
-        my $textminlength = $service->getAttributeNode("textminlength");
-
-	    if (defined($textminlength))
-		{
-        	$s->{TextMinLength} = $textminlength->getValue();
-	    }
-
-        my $textmaxlength = $service->getAttributeNode("textmaxlength");
-
-	    if (defined($textmaxlength))
-		{
-        	$s->{TextMaxLength} = $textmaxlength->getValue();
-	    }
-
-        my $fromrequired = $service->getAttributeNode("fromrequired");
-
-	    if (defined($fromrequired))
-		{
-        	$s->{FromRequired} = $fromrequired->getValue();
-	    }
-
-        my $fromminlength = $service->getAttributeNode("fromminlength");
-
-	    if (defined($fromminlength))
-		{
-        	$s->{FromMinLength} = $fromminlength->getValue();
-	    }
-
-        my $frommaxlength = $service->getAttributeNode("frommaxlength");
-
-	    if (defined($frommaxlength))
-		{
-        	$s->{FromMaxLength} = $frommaxlength->getValue();
-	    }
-
-        my $callbackrequired = $service->getAttributeNode("callbackrequired");
-
-	    if (defined($callbackrequired))
-		{
-        	$s->{CallbackRequired} = $callbackrequired->getValue();
-	    }
-
-        my $callbacksupported = $service->getAttributeNode("callbacksupported");
-
-	    if (defined($callbacksupported))
-		{
-        	$s->{CallbackSupported} = $callbacksupported->getValue();
-	    }
-
-        my $callbackminlength = $service->getAttributeNode("callbackminlength");
-
-	    if (defined($callbackminlength))
-		{
-        	$s->{CallbackMinLength} = $callbackminlength->getValue();
-	    }
-
-        my $callbackmaxlength = $service->getAttributeNode("callbackmaxlength");
-
-	    if (defined($callbackmaxlength))
-		{
-        	$s->{CallbackMaxLength} = $callbackmaxlength->getValue();
-	    }
-
-        my $type = $service->getAttributeNode("type");
-
-	    if (defined($type))
-		{
-        	$s->{Type} = $type->getValue();
-	    }
+sub _parse_request {
+	# get the values
+	my $self = shift();
+	
+	#print "parse_request -> " . $self . "\n";
+	
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
 		
-        my $smartmsg = $service->getAttributeNode("smartmsg");
-
-	    if (defined($smartmsg))
-		{
-        	$s->{SmartMsgID} = $smartmsg->getValue();
-	    }
-
-		# New Carrier Recognition Functions
-		my $country_code = $service->getAttributeNode("countrycode");
-
-        if (defined($country_code))
-		{
-        	$s->{CountryCode} = $country_code->getValue();
-        }
-
-		my $country_name = $service->getAttributeNode("countryname");
-
-        if (defined($country_name))
-		{
-        	$s->{CountryName} = $country_name->getValue();
-        }
-
-		my $country_reg = $service->getAttributeNode("countryregion");
-
-		if (defined($country_reg))
-		{
-        	$s->{CountryRegion} = $country_reg->getValue();
-    	}
-
-		##############################################################
-        # Now push hash onto service_list array
-        ##############################################################
-		push @{ $self->{m_CarrierList} }, $s;
+		if ($name eq 'version') {
+			$self->{m_Version} = $value;
+		} elsif ($name eq 'protocol') {
+			$self->{m_Protocol} = $value;
+		} elsif ($name eq 'type') {
+			$self->{m_Type} = $value;
+		}
 	}
-
-	if($self->{DEBUG})
-	{
-		print 'XMLParseEx @exit:' . "\n";
-		print "Client Status Code: $self->{m_ClientStatusCode}\n";
-		print "Client Status Desc: $self->{m_ClientStatusDesc}\n";
-		print "ErrorCode == " . $self->errorCode . "\n";
-		print "ErrorDesc == " . $self->errorDesc . "\n\n";
-        print "ErrorResolution == " . $self->errorResolution . "\n\n";
-	}
-
 }
+
+sub _parse_response {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'version') {
+			$self->{m_Version} = $value;
+		} elsif ($name eq 'protocol') {
+			$self->{m_Protocol} = $value;
+		} elsif ($name eq 'type') {
+			$self->{m_Type} = $value;
+		}
+	}
+}
+
+sub _parse_error {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'code') {
+			$self->errorCode($value);
+		} elsif ($name eq 'description') {
+			$self->errorDescription($value);
+		} elsif ($name eq 'resolution') {
+			$self->errorResolution($value);
+		}
+	}
+}
+
+sub _parse_status {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'code') {
+			$self->statusCode($value);
+		} elsif ($name eq 'description') {
+			$self->statusDescription($value);
+		}
+	}
+}
+
+sub _parse_account {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'id') {
+			$self->accountId($value);
+		} elsif ($name eq 'password') {
+			$self->accountPassword($value);
+		} elsif ($name eq 'balance') {
+			$self->accountBalance($value);
+		}
+	}
+}
+
+
+sub _parse_ticket {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'id') {
+			$self->ticketId($value);
+		} elsif ($name eq 'fee') {
+			$self->ticketFee($value);
+		}
+	}
+}
+
+
+sub _parse_dest {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'addr') {
+			$self->destAddr($value);
+		} elsif ($name eq 'network') {
+			$self->networkId($value);
+		}
+	}
+}
+
+
+sub _parse_source {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'addr') {
+			$self->sourceAddr($value);
+		}
+	}
+}
+
+
+sub _parse_option {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'udhi') {
+			$self->optUdhi($value);
+		} elsif ($name eq 'encoding') {
+			$self->optEncoding($value);
+		}
+	}
+}
+
+
+sub _parse_page {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+		if ($name eq 'pin') {
+			$self->destAddr($value);
+		} elsif ($name eq 'callback') {
+			$self->sourceAddr($value);
+		} elsif ($name eq 'text') {
+			# interpret text attribute as the actual
+			# byte values in the string which should
+			# only represent text in WMP v2.0
+			$self->msgText($value);
+		}
+	}
+}
+
+
+sub _parse_message {
+	# get the values
+	my $self = shift();
+	my @attrs = @_;
+	# loop through each attribute
+	for (my $i = 0; $i < @attrs; $i+=2) {
+		my $name = $attrs[$i];
+		my $value = $attrs[$i+1];
+
+		if ($name eq 'data') {
+			
+			# convert hex-encoded string into byte string
+			# incoming message data is always in bytes
+			# interpret what the data means with the 
+			# "encoding" attribute
+			$self->msgData(pack("H*", $value));
+			
+		} elsif ($name eq 'udh') {
+			
+			# convert hex-encoded string into byte string
+			$self->udh(pack("H*", $value));
+		
+		}
+	}
+}
+
 
 ######################################################################
 #
@@ -2109,8 +2161,7 @@ sub xmlParseEx
 #
 ######################################################################
 
-sub escape
-{
+sub escape {
     shift() if ref($_[0]);
     my $toencode = shift();
     return undef unless defined($toencode);
@@ -2119,8 +2170,7 @@ sub escape
 }
 
 
-sub html_encode
-{
+sub html_encode {
     shift() if ref($_[0]);
     my $toencode = shift();
     return undef unless defined($toencode);
@@ -2135,8 +2185,8 @@ sub html_encode
 }
 
 
-sub unicode_encode
-{
+sub unicode_encode {
+
     shift() if ref($_[0]);
     my $toencode = shift();
     return undef unless defined($toencode);
@@ -2198,13 +2248,12 @@ sub unicode_encode
 }
 
 
-sub handle_http_error
-{
+sub handle_http_error {
+
 	my $self = shift();
 	my $http_error = shift();
 
-	my $errorLookup = 
-	{
+	my $errorLookup =  {
 		#HTTP       Simplewire
 		#ERROR      ERROR
 		#---------------------
@@ -2224,7 +2273,6 @@ sub handle_http_error
 		413		=>	264,
 		414		=>	265,
 		415		=>	266,
-
 		500		=>	267,
 		501		=>	268,
 		502		=>	269,
@@ -2234,16 +2282,14 @@ sub handle_http_error
 	};
 
 	# check if it was anything but success codes
-	if( $http_error >= 200 && $http_error < 300 )
-	{
+	if( $http_error >= 200 && $http_error < 300 ) {
 		# return that no error was found
-		$self->raise_error( 0 );
+		# $self->raise_error(0);
 		return 0;
 	}
 
 	# Check if valid http error number
-	if(  defined( $errorLookup->{$http_error} )  )
-	{
+	if (defined( $errorLookup->{$http_error})) {
 		# valid http error number, so set Simplewire error
 		$self->raise_error( $errorLookup->{$http_error} );
 		return 1;
@@ -2255,17 +2301,14 @@ sub handle_http_error
 	return 0;
 }
 
-sub raise_error
-{
+sub raise_error {
 
     my $self = shift();
     my $error = shift();
 
     $self->errorCode($error);
 	
-	my $errorLookup = 
-	{
-
+	my $errorLookup =  {
 		# Client/Internet Error Codes
 		101		=>	"Error while parsing response.  Request was sent off.",
 		102		=>	"The required version attribute of the response element was not found in the response.",
@@ -2310,7 +2353,7 @@ sub raise_error
 		265		=>	"HTTP Request-URI too long.",			# 414
 		266		=>	"HTTP Unsupported media type.",			# 415
 		267		=>	"HTTP Internal server error.",			# 500
-		268		=>	"HTTP Not implemented.",				# 501
+		268		=>	"SSL not supported or bad HTTP method", # 501
 		269		=>	"HTTP Bad gateway.",					# 502
 		270		=>	"HTTP Service unavailable.",			# 503
 		271		=>	"HTTP Gateway timeout.",				# 504
@@ -2319,23 +2362,19 @@ sub raise_error
 
 
 	# Check if valid error number
-	if(  defined( $errorLookup->{$error} )  )
-	{
+	if (defined( $errorLookup->{$error})) {
 		# valid error number, so set error description
 		$self->errorDesc( $errorLookup->{$error} );
-	}
-	else
-	{
+	} else {
 		# invalid error number, so set general error
 		$self->errorCode( 106 );
 		$self->errorDesc( $errorLookup->{106} );
 	}
-	
 }
 
 
-sub prepare_post
-{
+sub prepare_post {
+
 	my $self = shift();
 	my $varref = shift();
 
@@ -2360,20 +2399,17 @@ sub prepare_post
 
 
 
-sub send
-{
+sub send {
+
 	# pop value
     my $self = shift();
 	
 	# check to make sure that this function is being called on an object
     die "You must instantiate an object to use this function" if !(ref($self));
 
-	$self->{m_RequestType} = shift();
+	$self->{m_Type} = shift();
+	
     my $txt = "";
-    my %vars = (
-		"xml" => $self->toXML()
-	);
-
 
     ##################################################################
     # Create LWP::UserAgent Object
@@ -2381,15 +2417,12 @@ sub send
 	my $http = new LWP::UserAgent;
 	$http->timeout( $self->connectionTimeout );
 	$http->agent( $self->{m_UserAgent} . ' ' . $http->agent );
+	
 	if( defined( $self->{m_ProxyServer} ) )
 	{
-		$http->proxy('http', $self->{m_ServerProtocol} . $self->proxyServer . ':' . $self->proxyPort . '/');
+		$http->proxy("http", "http://" . $self->proxyServer . ':' . $self->proxyPort . '/');
 	}
 
-	
-    ##################################################################
-    # Begin loop for redundancy
-    ##################################################################
 	my $httpErrorEvent = undef;
 	
 	# Create a request
@@ -2397,105 +2430,90 @@ sub send
 	
 	my $response = undef;
 
-	my $body = undef;
+	# create the xml body
+	my $body = $self->toXML();
 	
    	##########################################################
 	# Create the url to retrieve
 	##########################################################
-	my $server_name = $self->serverName . "." . $self->serverDomain . ":" . $self->serverPort;
-	my $full_file = $self->{m_ServerProtocol} . $server_name . $self->{m_ServerFile};
+	my $server_name = $self->remoteHost;
+	
+	# check whether or not the port needs overridden
+	if (defined($self->remotePort) && $self->remotePort > 0) {
+		if ($self->debug) { print "Connect: overriding remote port to " . $self->remotePort . "\n"; }
+		$server_name = $server_name . ":" . $self->remotePort;
+	} else {
+		if ($self->debug) { print "Connect: using default http or https port\n"; }
+	}
+	
+	my $full_file = undef;
+	
+	if ($self->{m_Secure}) {
+		$full_file = 'https://' . $server_name . $self->{m_RemoteFile};
+	} else {
+		$full_file = 'http://' . $server_name . $self->{m_RemoteFile};
+	}
 
 	##########################################################
 	# Request and get response
 	##########################################################
 
-
-	$body = $self->prepare_post(\%vars);
-
-	# Finish setting up request
+	# finish setting up request
 	$request = new HTTP::Request( POST => $full_file);
-	$request->content_type("application/x-www-form-urlencoded");
+	$request->content_type("text/xml");
 	$request->content($body);
 	$request->header( 'Accept' => 'text/xml' );
 	$request->proxy_authorization_basic( $self->proxyUsername,
 										 $self->proxyPassword );
 
-
 	# send off request and get response
 	$response = $http->request($request);
-
 
 	$self->{m_ClientStatusCode} = $response->code;
 	$self->{m_ClientStatusDesc} = $response->message;
 
-	if( $self->handle_http_error( $self->{m_ClientStatusCode} ) )
-	{
+	if ($self->handle_http_error($self->{m_ClientStatusCode})) {
 		$httpErrorEvent = 1;
 	}
 
-	if ( $self->{DEBUG} && defined( $self->proxyServer ) && $response->is_success )
-	{
+	if ( $self->{DEBUG} && defined( $self->proxyServer ) && $response->is_success) {
 		print "Successful Proxy\n";
-	}
-	elsif( $self->{DEBUG} && defined( $self->proxyServer ) )
-	{
+	} elsif( $self->{DEBUG} && defined($self->proxyServer)) {
 		print "Failed Proxy\n";
 	}
 
-
-	if ( defined($response) && defined($response->content) )
-	{
+	if (defined($response) && defined($response->content)) {
 		$txt = $response->content;
-	}
-	else
-	{
+	} else {
 		$txt = "";
 	}
 
-
-	if($self->{DEBUG})
-	{
+	if($self->{DEBUG}) {
 		print "@ SEND\n";
 		print "Client Status Code: $self->{m_ClientStatusCode}\n";
 		print "Client Status Desc: $self->{m_ClientStatusDesc}\n";
 		print "m_ErrorCode == " . $self->errorCode . "\n";
 		print "m_ErrorDesc == " . $self->errorDesc . "\n";
+		print "Response Body == " . $txt . "\n";
 	}
-
 
 	# now, check for errors, special cases. Parse response.
 	# Check for HTTP Error
-	if ( defined($httpErrorEvent) )
-	{
+	if ( defined($httpErrorEvent) ) {
 		# do nothing. Http error codes were already set.
 		return 0;
-	}
-	elsif (defined($txt) && $txt eq "")
-	{
+	} elsif (defined($txt) && $txt eq "") {
     	$self->raise_error(106);
         return 0;
-	}
 	# Now parse the xml
-	else
-	{
+	} else {
     	# Cleanup text
-    	if (defined($txt))
-		{
-			$txt =~ s/^.*<\?xml/<\?xml/gs;
-                        if ($^O eq "MSWin32") {
-				if ($txt =~ s/.land Mobiltelefon AB/ land Mobiltelefon AB/) {
-	                                #print "Found plus sign\n";
-	                        }
-				if ($txt =~ s/[éçõÔÉó]/_/g) {
-	                               #print "Found bad char\n";
-	                        }
-                        }
-
-        	$self->xmlParseEx($txt);
+    	if (defined($txt)) {
+			# set the response xml
+			$self->{ResponseXML} = $txt;
+        	$self->parse($txt);
         	return 1;
-        }
-		else
-		{
+        } else {
         	# Problem, set general error. Return fail.
 			$self->raise_error(106);
             return 0;
@@ -2592,6 +2610,11 @@ else
     print "Error Description: " . $sms->errorDesc() . "\n";
     print "Error Resolution: " . $sms->errorResolution() . "\n";
 }
+
+=head1 Receiving SMS
+
+Please see http://www.simplewire.com/services/mo/
+for more information on receiving SMS.
 
 =head1 EMS (Enhanced Message Service)
 

@@ -1,7 +1,7 @@
-#!/usr/bin/perl -I ../lib
+#!/usr/bin/perl -w -I ../lib
 
 ###################################################################
-#  Copyright (c) 1999-2001 Simplewire, Inc. All Rights Reserved.
+#  Copyright (c) 1999-2004 Simplewire, Inc. All Rights Reserved.
 # 
 #  Simplewire grants you ("Licensee") a non-exclusive, royalty
 #  free, license to use, modify and redistribute this software

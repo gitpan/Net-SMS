@@ -1,7 +1,7 @@
-#!/usr/bin/perl -I ../lib
+#!/usr/bin/perl -w -I ../lib
 
 ###################################################################
-#  Copyright (c) 1999-2001 Simplewire, Inc. All Rights Reserved.
+#  Copyright (c) 1999-2004 Simplewire, Inc. All Rights Reserved.
 # 
 #  Simplewire grants you ("Licensee") a non-exclusive, royalty
 #  free, license to use, modify and redistribute this software
@@ -41,8 +41,8 @@ use Net::SMS;
 my $sms = Net::SMS->new();
 
 # Subscriber Settings
-$sms->subscriberID("");
-$sms->subscriberPassword("");
+$sms->subscriberID("123-456-789-12345");
+$sms->subscriberPassword("Password Goes Here");
 
 # Message Settings
 $sms->msgPin("+1 313 555 1212");

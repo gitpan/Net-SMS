@@ -1,7 +1,7 @@
-#!/usr/bin/perl -I ../lib
+#!/usr/bin/perl -w -I ../lib
 
 ###################################################################
-#  Copyright (c) 1999-2001 Simplewire, Inc. All Rights Reserved.
+#  Copyright (c) 1999-2004 Simplewire, Inc. All Rights Reserved.
 # 
 #  Simplewire grants you ("Licensee") a non-exclusive, royalty
 #  free, license to use, modify and redistribute this software
@@ -44,14 +44,14 @@ my $sms = Net::SMS->new();
 $sms->subscriberID("123-456-789-12345");
 $sms->subscriberPassword("Password Goes Here");
 
+# Optional Message Settings
+$sms->optContentType("wap_push");
+$sms->optUrl("http://wap.espn.com/");
+
 # Message Settings
 $sms->msgPin("+1 100 510 1234");
-$sms->msgFrom("Demo");
 $sms->msgCallback("+1 100 555 1212");
 $sms->msgText("Hello World From Simplewire!");
-
-# Optional Message Setttings
-$sms->optFlash("true");
 
 print "Sending message to Simplewire...\n";
 
@@ -62,6 +62,7 @@ $sms->msgSend();
 if ($sms->success)
 {
     print "Message was sent!\n";
+    print "Ticket Id: " . $sms->ticketId() . "\n";
 }
 else
 {

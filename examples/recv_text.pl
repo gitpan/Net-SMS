@@ -26,12 +26,12 @@
 ###################################################################
 
 ###################################################################
-#  Shows how to send an operator logo in Perl.
+#  Shows how to receive a wireless text message in Perl.
 # 
 #  Please visit www.simplewire.com for sales and support.
 # 
 #  @author Simplewire, Inc.
-#  @version 2.4.1
+#  @version 2.6.0
 ###################################################################
 
 # Import Module
@@ -40,38 +40,21 @@ use Net::SMS;
 # Create Object
 my $sms = Net::SMS->new();
 
-# Subscriber Settings
-$sms->subscriberID("123-456-789-12345");
-$sms->subscriberPassword("Password Goes Here");
 
-# Message Settings
-$sms->msgPin("+1 100 510 1234");
-$sms->msgFrom("Demo");
-$sms->msgCallback("+1 100 555 1212");
+# Parse incoming XML
+# This XML would be POSTed over HTTP to your web server
+# it is the customer's responsibility for somehow getting
+# the string of XML to this SDK function and the SDK will
+# take care of correctly parsing the incoming message.
+# This is just an example.
+$sms->parse('<?xml version="1.0" ?><request version="2.0" protocol="paging" type="sendpage"><subscriber id="123-456-789-12345"/><page pin="+11005101234" callback="+11005551212" text="Hello World From Simplewire!"/><ticket id="JP4RV-7FG1U-8S7EG-J0RH9" fee="2.0"/></request>');
 
-# Smart Message Settings - View the manual for
-# more smart messaging options and acceptance of
-# raw hex data. Visit www.simplewire.com for
-# more information about network and country codes.
-$sms->optPhone("nokia");
-$sms->optCountryCode("Country Code goes here");
-$sms->optNetworkCode("Network Code goes here");
-$sms->msgOperatorLogoFilename("example.gif");
 
-print "Sending message to Simplewire...\n";
-
-# Send Message
-$sms->msgSend();
-
-# Check For Errors
-if ($sms->success)
-{
-    print "Message was sent!\n";
-}
-else
-{
-    print "Message was not sent!\n";
-    print "Error Code: " . $sms->errorCode() . "\n";
-    print "Error Description: " . $sms->errorDesc() . "\n";
-    print "Error Resolution: " . $sms->errorResolution() . "\n";
-}
+# Print out all important vars
+print "Received Message from Simplewire!\n\n";
+print "Message Details:\n";
+print "-----------------------------\n";
+print "     Pin: " . $sms->msgPin() . "\n";
+print "Callback: " . $sms->msgCallback() . "\n";
+print "    Text: " . $sms->msgText() . "\n";
+print "TicketId: " . $sms->ticketId() . "\n";

@@ -1,7 +1,7 @@
-#!/usr/bin/perl -I ../lib
+#!/usr/bin/perl -w -I ../lib
 
 ###################################################################
-#  Copyright (c) 1999-2001 Simplewire, Inc. All Rights Reserved.
+#  Copyright (c) 1999-2004 Simplewire, Inc. All Rights Reserved.
 # 
 #  Simplewire grants you ("Licensee") a non-exclusive, royalty
 #  free, license to use, modify and redistribute this software
@@ -40,6 +40,12 @@ use Net::SMS;
 # Create Object
 my $sms = Net::SMS->new();
 
+# optional flag to indicate SSL should be used
+# SSL is not a standard Simplewire feature -- make
+# sure you have it activated on your account for use
+# before you start to rely on it.
+#$sms->secure(1);
+
 # Subscriber Settings
 $sms->subscriberID("123-456-789-12345");
 $sms->subscriberPassword("Password Goes Here");
@@ -50,6 +56,11 @@ $sms->msgFrom("Demo");
 $sms->msgCallback("+1 100 555 1212");
 $sms->msgText("Hello World From Simplewire!");
 
+# Optional Message Settings
+# On GSM phones this will make the SMS "flash" up
+# on the user's phone.
+#$sms->optFlash("true");
+
 print "Sending message to Simplewire...\n";
 
 # Send Message
@@ -59,6 +70,7 @@ $sms->msgSend();
 if ($sms->success)
 {
     print "Message was sent!\n";
+    print "Ticket Id: " . $sms->ticketId() . "\n";
 }
 else
 {

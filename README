@@ -1,19 +1,261 @@
 
 Simplewire, Inc.
-Perl SMS Software Development Kit 2.4.1
-
+Perl SMS Software Development Kit 2.6.1
 
 Contents
 ----------------------------------------------------------------
-1. Overview
-2. Modules
-3. Installation and Documentation
-4. Example Source Code
-5. Simplewire Developer Program
-6. Demo Message Credits (How Do I Send Live Messages?)
-7. Commercial Software License
-8. Sales and Technical Support
+1. Release Notes
+2. Overview
+3. Modules
+4. Installation and Documentation
+5. Example Source Code
+6. Simplewire Developer Program
+7. Demo Message Credits (How Do I Send Live Messages?)
+8. Commercial Software License
+9. Sales and Technical Support
 
+Release Notes
+----------------------------------------------------------------
+
+2.6.1 - January 25, 2003
+
+    * Fixed minor XML formatting bug.
+    
+    * Addded recv_text.pl example show how to receive incoming
+      SMS from Simplewire.
+      
+    * Added first version of the test suite.
+
+2.6.0 - July 21, 2003
+
+    * Added WAP push support.
+
+    * Added account() command to query network for real-time
+      credit balance.
+
+    * Methods submit(), query(), list(), account() all return
+      a true or false based on success() property.
+
+    * Implemented mobile originated SMS (receiving SMS) to support
+      version 2.0 and 2.5 of the WMP protocol.
+
+    * Verified and fixed all issues to verify module works in
+      both "-w" and "-Tw" modes.
+      
+    * Deprecated functions -> new equivalent functions
+      - msgSend() = submit()
+      - msgStatusSend() = query()
+      - carrierListSend() = list()
+      
+      - msgPin() = destAddr()
+      - msgCallback() = sourceAddr()
+      - proxyServer() = proxyHost()
+
+    * Backwards compatability broken on ServerName and ServerDomain
+      properties.  These will NOT effect normal use of the SDK even
+      if you previously used them.
+      
+    * Many other functions are renamed to adapt to new, upcoming
+      standards going to be introduced in version 3.x.x of the SDK.
+      All previously named functions are mapped to the new names
+      meaning all previous code is backwards-compatible.
+
+    * Fixed "unquoted string may conflict with future reserved word"
+      bug when Perl is run in -w or warning mode. 
+
+    * Added SSL support, see Secure property for more information
+      on how to use this new feature.
+      
+         $sms->secure(1);
+      
+    * Added debug output to help debug connection problems, network
+      settings, and general problems.
+      
+         $sms->debug(1);
+
+    * Deprecated ServerName, ServerDomain, and ServerPort.  Please
+      see RemoteHost and RemotePort.
+      
+    * Modified internal variables by renaming them:
+        ServerName, ServerDomain = RemoteHost
+        ServerPort = RemotePort
+        ServerFile = RemoteFile
+        Removed ServerProtocol since that is internally used.
+
+    * Modified RemotePort function to default to 0 which stands
+      for "unused".  If unchanged, SDK will connect over port
+      80 and if "secure" is true, then SDK will connect over
+      port 443.  However, any update of RemotePort will cause
+      the SDK to manually connect to that port.
+
+    * Modified default remote host to wmp.simplewire.com not
+      wmp-test.simplewire.com.
+      
+    * Modified remote file from /paging/rpc.xml to /wmp
+
+2.5.1 - June 6, 2003
+ 
+    * Fixed minor bug regarding carrier list character
+      translation.
+
+2.5.0 - June 1, 2003
+
+    * Added EMS (Enhanced Message Service) features.
+
+2.4.1 - October 26, 2001
+
+    * Added optFlash()
+    
+    * Added errorResolution()
+    
+    * Added methods that allow users to set image data in hex format
+      instead of only being able to specify using filenames.
+    
+    * Updated installation procedures
+    
+    * Changed 'SmartMsg' carrierlist hash attribute to 'SmartMsgID' to
+      match other SDKs.
+      
+    * Added proxyType()
+    
+    * Updated all example code
+    
+    * Updated perldoc manpage within SMS.pm
+
+2.4.0 - (2001-9-21)
+
+	* Added smart messaging. Updatated documentation.
+
+2.3.3 - August 21, 2001
+
+	* Removed 'pwd' commands from makefile for compatibility
+	  with Windows installation.
+
+2.3.2 - August 13, 2001
+
+	* Changed "UserName" to "Username" with lowercase 'n'.
+	  Added pass-through functions with old name
+	  for backward compatibility.
+	  - Updated documentation
+	  - Updated examples
+
+	* Restored code for deprecated 'synchronous' method for
+	  backward compatibilty. Method does nothing.
+
+	* Modified code for deprecated 'userAgent' method for
+	  backward compatibilty. Method returns empty string.
+
+	* Added reset method, Reset(). SMS member values
+	  are no longer set in the new() method. The new()
+	  method calls Reset(). User can now reset a SMS object
+	  instead of creating a new fresh object.
+	  - Updated documentation
+
+	* Renamed internal method 'xml' to 'toXML'.
+	  - Updated documentation
+
+	* Added responseXML() to get/set the response XML.
+	  This will not be documented.
+
+	* Added requestXML() to get/set the request XML.
+	  This will not be documented - at least, not at this time.
+
+	* Added a reminder in the documentation that the
+	  Unicode escape sequences are meant only for
+	  double-quoted strings.
+
+	* Added PublicChangeLog.txt
+	  - Modified release batch file to use PublicChangeLog.txt
+
+2.3.1 - July 31, 2001 (Beta Program)
+
+	* Renamed 'timeout' method to 'connectionTimeout'
+
+	* ServerPagingURL renamed to ServerFile
+
+	* Changed default ServerName from 'rpc' to 'wmp-test'.
+
+	* Changed default OptDelimiter from ":" to undefined
+
+	* DataCoding XML bug fixed
+
+2.3.0 - July 19, 2001 - (Developed as version 2.2.2)
+
+	* Unicode support added
+
+	* Custom Simplewire Unicode escape sequence added. \\X####
+
+	* MsgText and MsgFrom attributes are now sent as Unicode
+
+	* Deprecated synchronous
+
+	* Deprecated RPC loop
+
+	* Updated old error codes to new error codes
+
+	* Modified README
+
+	* Updated man page
+
+	* Added optDataCoding method
+
+	* Removed attributes: m_ServerFloor, m_ServerCeiling, m_Success.
+
+	* Added subscriber password support
+
+	* Revised examples
+
+2.2.1 - July 2, 2001
+
+	* Included module dependencies
+
+	* Automated module installation
+
+	* Updated release script
+
+2.2.0 - June 15, 2001
+
+	* Added serverPort function
+
+2.1.3 - April 27, 2001
+
+	* Deprecated User Agent for licensing
+
+	* Fixed minor EAGAIN macro error in SMS::HTTP on Red Hat 7.0
+
+	* Fixed entities bug while submitting XML to Simplewire 
+
+2.1.2 - April 16, 2001
+
+	* Windows compatibility with Active State Perl
+
+	* Add PPD Distribution For Active State Perl
+
+	* Fixed minor SMS::HTTP macro bug
+
+2.1.0 - April 14, 2001
+
+	* Added Carrier Recognition Functions
+
+	* Removed LWP::UserAgent dependency
+
+	* Added Lite SMS::HTTP library
+
+	* Improved performance by nearly 30%
+
+2.0.0 - March 24, 2001
+
+	* Removed SMS::Request and SMS::Response
+
+	* New interface and function names
+
+	* Added new redundancy with looping of WMP Servers
+
+	* Added MsgSendEx for easier sending of quick messages
+
+1.0.0 - October 5, 2000
+
+	* First public release
 
 Overview
 ----------------------------------------------------------------

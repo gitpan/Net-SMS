@@ -1,4 +1,4 @@
-#!/usr/bin/perl -I ../lib
+#!/usr/bin/perl -w -I ../lib
 
 ###################################################################
 #  Copyright (c) 1999-2001 Simplewire, Inc. All Rights Reserved.
